@@ -1,0 +1,517 @@
+const { parseMedicineQuery } = require('./parser');
+const fuzzySearch = require('../utils/medicine-fuzzy-search');
+
+const buildQueryVariants = fuzzySearch.buildQueryVariants;
+const transliterateLatinToCyrillic =
+  typeof fuzzySearch.transliterateLatinToCyrillic === 'function'
+    ? fuzzySearch.transliterateLatinToCyrillic
+    : (value) => value;
+const normalizeQuery =
+  typeof fuzzySearch.normalizeQuery === 'function'
+    ? fuzzySearch.normalizeQuery
+    : (value) =>
+        String(value || '')
+          .toLowerCase()
+          .replace(/ё/g, 'е')
+          .replace(/[^\p{L}\p{N}]+/gu, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+const VOLUME_LIKE_UNITS = new Set(['мл', 'л', 'г']);
+const CONTAINER_TOKEN_RE =
+  /(^|\s)(флак\.?|флакон(?:ы|а|е|ов|ам|ами|ах)?|амп(?:\.|ул(?:ы|а|е|ов|ам|ами|ах)?)?|карт(?:\.|ридж(?:и|а|ей|ам|ами|ах)?)?|блистер(?:ы|а|е|ов|ам|ами|ах)?|туб(?:а|ы|е|у|ой|ами|ах)?|туб\.?|бутылк(?:а|и|е|у|ой|ами|ах)?|пакетик[а-я]*|пакет\.?|пакеты|саше|стик[а-я]*)(?=\s|$)/iu;
+
+function parseTradeName(name) {
+  if (!name) return null;
+  const commaIndex = findDelimitedCommaIndex(name);
+  if (commaIndex === -1) return name.trim() || null;
+  return name.slice(0, commaIndex).trim() || null;
+}
+
+// Match a comma that isn't a decimal separator (skip `0,1`; split on `name, 5 мг`).
+const DELIMITED_COMMA_RE = /(?<!\d),|,(?!\d)/u;
+
+function findDelimitedCommaIndex(value) {
+  return String(value || '').search(DELIMITED_COMMA_RE);
+}
+
+function normalizeStoredLookupValue(value) {
+  const text = String(value || '').trim();
+  return text ? text.toLowerCase() : null;
+}
+
+function normalizeTextList(values) {
+  const items = [];
+  const seen = new Set();
+
+  for (const value of values || []) {
+    const text = String(value || '').trim();
+    const key = text.toLowerCase().replace(/ё/gu, 'е');
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    items.push(text);
+  }
+
+  return items;
+}
+
+function joinStoredValues(values) {
+  const items = normalizeTextList(values);
+  return items.length ? items.join(', ') : null;
+}
+
+function joinMeasurements(texts, name) {
+  if (!texts.length) return null;
+  if (texts.length === 1) return texts[0];
+  const slashJoined = texts.join('/');
+  if (String(name || '').includes(slashJoined)) return slashJoined;
+  return texts.join(', ');
+}
+
+function pickSegmentMeasurements(attributes) {
+  const strengths = (attributes?.strengths || []).map((strength) => strength?.text).filter(Boolean);
+  const volumes = (attributes?.volumes || []).map((volume) => volume?.text).filter(Boolean);
+
+  if (volumes.length || strengths.length !== 1) {
+    return { strengths, volumes };
+  }
+
+  const [singleStrength] = attributes.strengths || [];
+  if (singleStrength?.kind === 'simple' && VOLUME_LIKE_UNITS.has(singleStrength.unit)) {
+    return {
+      strengths: [],
+      volumes: [singleStrength.text],
+    };
+  }
+
+  return { strengths, volumes };
+}
+
+function dosageFormPriority(source) {
+  if (source === 'explicit') return 2;
+  if (source === 'inferred_from_container') return 1;
+  return 0;
+}
+
+function hasExplicitContainerHint(text) {
+  return CONTAINER_TOKEN_RE.test(String(text || '').toLowerCase());
+}
+
+function isBrandOnlyProductType(productType) {
+  return productType === 'device' || productType === 'other';
+}
+
+function applyAttributeOverrides(parsed, overrides) {
+  if (!overrides) return parsed;
+
+  const attributes = { ...(parsed?.attributes || {}) };
+
+  if (overrides.dosage_form !== undefined) {
+    attributes.dosage_form = overrides.dosage_form || null;
+  }
+
+  if (overrides.strength !== undefined) {
+    attributes.strengths = overrides.strength
+      ? [{ kind: 'simple', text: String(overrides.strength) }]
+      : [];
+  }
+
+  if (overrides.volume !== undefined) {
+    attributes.volumes = overrides.volume ? [{ text: String(overrides.volume) }] : [];
+  }
+
+  return { ...parsed, attributes };
+}
+
+function shouldUseSegmentAttributes(segment, attributes, wholeTradeName) {
+  const segmentText = normalizeQuery(segment);
+  const segmentTradeName = normalizeQuery(attributes?.trade_name_text || '');
+  const normalizedWholeTradeName = normalizeQuery(wholeTradeName || '');
+
+  if (!segmentTradeName || !normalizedWholeTradeName) return true;
+  if (segmentTradeName !== normalizedWholeTradeName) return true;
+
+  return segmentText === normalizedWholeTradeName;
+}
+
+function collectStructuredDetails(name) {
+  const rawName = String(name || '').trim();
+  const tradeName = parseTradeName(rawName);
+
+  if (!rawName) {
+    return {
+      trade_name: null,
+      container_type: null,
+      dosage_form: null,
+      product_type: null,
+      strength: null,
+      volume: null,
+      pack: null,
+      strengthTexts: [],
+      volumeTexts: [],
+    };
+  }
+
+  if (findDelimitedCommaIndex(rawName) === -1) {
+    const wholeQuery = parseMedicineQuery(rawName).attributes;
+    if (isBrandOnlyProductType(wholeQuery.product_type)) {
+      return {
+        trade_name: normalizeStoredLookupValue(wholeQuery.trade_name_text),
+        container_type: null,
+        dosage_form: null,
+        product_type: wholeQuery.product_type || null,
+        strength: null,
+        volume: null,
+        pack: Number.isInteger(wholeQuery.pack_count) ? wholeQuery.pack_count : null,
+        strengthTexts: [],
+        volumeTexts: [],
+      };
+    }
+
+    return {
+      trade_name: normalizeStoredLookupValue(tradeName),
+      container_type: wholeQuery.dosage_form ? null : wholeQuery.container_type || null,
+      dosage_form: null,
+      product_type: wholeQuery.product_type || null,
+      strength: null,
+      volume: null,
+      pack: null,
+      strengthTexts: [],
+      volumeTexts: [],
+    };
+  }
+
+  const segments = rawName
+    .split(/,(?!\d)/u)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  const wholeQuery = parseMedicineQuery(rawName).attributes;
+
+  if (isBrandOnlyProductType(wholeQuery.product_type)) {
+    return {
+      trade_name: normalizeStoredLookupValue(wholeQuery.trade_name_text),
+      container_type: null,
+      dosage_form: null,
+      product_type: wholeQuery.product_type || null,
+      strength: null,
+      volume: null,
+      pack: Number.isInteger(wholeQuery.pack_count) ? wholeQuery.pack_count : null,
+      strengthTexts: [],
+      volumeTexts: [],
+    };
+  }
+
+  const tradeNameSegmentQuery = parseMedicineQuery(tradeName).attributes;
+  const strengthTexts = [];
+  const volumeTexts = [];
+  let dosageForm = tradeNameSegmentQuery.dosage_form || null;
+  let dosageFormSource = tradeNameSegmentQuery.dosage_form_source || null;
+  let containerType =
+    tradeNameSegmentQuery.container_type && hasExplicitContainerHint(tradeName)
+      ? tradeNameSegmentQuery.container_type
+      : null;
+  let pack = null;
+  let productType = tradeNameSegmentQuery.product_type || null;
+
+  for (const segment of segments.slice(1)) {
+    const attributes = parseMedicineQuery(segment).attributes;
+    if (!shouldUseSegmentAttributes(segment, attributes, wholeQuery.trade_name_text)) {
+      continue;
+    }
+    const { strengths, volumes } = pickSegmentMeasurements(attributes);
+    const hasSlash = segment.includes('/');
+
+    strengthTexts.push(...(hasSlash && strengths.length > 1 ? [strengths.join('/')] : strengths));
+    volumeTexts.push(...(hasSlash && volumes.length > 1 ? [volumes.join('/')] : volumes));
+
+    if (attributes.container_type && !containerType && hasExplicitContainerHint(segment)) {
+      containerType = attributes.container_type;
+    }
+
+    if (attributes.dosage_form) {
+      const candidatePriority = dosageFormPriority(attributes.dosage_form_source);
+      const currentPriority = dosageFormPriority(dosageFormSource);
+
+      if (!dosageForm || candidatePriority > currentPriority) {
+        dosageForm = attributes.dosage_form;
+        dosageFormSource = attributes.dosage_form_source;
+      }
+    }
+
+    if (pack == null && Number.isInteger(attributes.pack_count)) {
+      pack = attributes.pack_count;
+    }
+
+    if (!productType && attributes.product_type) {
+      productType = attributes.product_type;
+    }
+  }
+
+  if (!containerType && wholeQuery.container_type && hasExplicitContainerHint(rawName)) {
+    containerType = wholeQuery.container_type;
+  }
+
+  if (!containerType && wholeQuery.container_type && !dosageForm) {
+    containerType = wholeQuery.container_type;
+  }
+
+  if (!dosageForm && wholeQuery.dosage_form) {
+    dosageForm = wholeQuery.dosage_form;
+  }
+
+  if (pack == null && Number.isInteger(wholeQuery.pack_count)) {
+    pack = wholeQuery.pack_count;
+  }
+
+  if (!productType && wholeQuery.product_type) {
+    productType = wholeQuery.product_type;
+  }
+
+  const normalizedStrengths = normalizeTextList(strengthTexts);
+  const normalizedVolumes = normalizeTextList(volumeTexts);
+  if (!normalizedStrengths.length && !normalizedVolumes.length) {
+    const { strengths: fallbackStrengths, volumes: fallbackVolumes } =
+      pickSegmentMeasurements(wholeQuery);
+    const fallbackStrength = joinMeasurements(fallbackStrengths, rawName);
+    const fallbackVolume = joinMeasurements(fallbackVolumes, rawName);
+
+    if (fallbackStrength) normalizedStrengths.push(fallbackStrength);
+    if (fallbackVolume) normalizedVolumes.push(fallbackVolume);
+  }
+  const storedStrength = joinStoredValues(normalizedStrengths);
+  const storedVolume = joinStoredValues(normalizedVolumes);
+
+  return {
+    trade_name: normalizeStoredLookupValue(tradeName),
+    container_type: containerType,
+    dosage_form: dosageForm,
+    product_type: productType,
+    strength: normalizeStoredLookupValue(storedStrength),
+    volume: normalizeStoredLookupValue(storedVolume),
+    pack,
+    strengthTexts: normalizedStrengths,
+    volumeTexts: normalizedVolumes,
+  };
+}
+
+function extractMedicineDetails(name) {
+  const { trade_name, container_type, dosage_form, product_type, strength, volume, pack } =
+    collectStructuredDetails(name);
+
+  return {
+    trade_name,
+    container_type,
+    dosage_form,
+    product_type,
+    strength,
+    volume,
+    pack,
+  };
+}
+
+function buildTradeOnlyParsed(parsed) {
+  if (!parsed) return null;
+
+  return {
+    ...parsed,
+    attributes: {
+      ...parsed.attributes,
+      dosage_form: null,
+      dosage_form_token: null,
+      dosage_form_source: null,
+      container_type: null,
+      product_type: null,
+      strengths: [],
+      volumes: [],
+      pack_count: null,
+    },
+  };
+}
+
+function buildBrandOnlyParsed(parsed, rawName) {
+  if (!parsed) return null;
+
+  const rawText = parsed.normalizedText || parsed?.attributes?.trade_name_text || rawName || '';
+  const fullText =
+    rawText === rawName
+      ? normalizeQuery(rawText)
+      : String(rawText).trim().toLowerCase().replace(/ё/gu, 'е');
+  if (!fullText) return null;
+
+  return {
+    ...parsed,
+    normalizedText: fullText,
+    attributes: {
+      ...parsed.attributes,
+      trade_name_text: fullText,
+      dosage_form: null,
+      dosage_form_token: null,
+      dosage_form_source: null,
+      container_type: null,
+      product_type: isBrandOnlyProductType(parsed?.attributes?.product_type)
+        ? parsed.attributes.product_type
+        : null,
+      strengths: [],
+      volumes: [],
+      pack_count: null,
+    },
+  };
+}
+
+function buildTradeNameVariantParsed(parsed, tradeNameText) {
+  const normalizedTradeName = normalizeQuery(tradeNameText);
+  if (!parsed || !normalizedTradeName) return null;
+
+  return {
+    ...parsed,
+    attributes: {
+      ...parsed.attributes,
+      trade_name_text: normalizedTradeName,
+      trade_name_tokens: normalizedTradeName.split(/\s+/u).filter(Boolean),
+    },
+  };
+}
+
+function buildStructuredTradeNameVariantParses(parsed) {
+  const tradeNameText = normalizeQuery(parsed?.attributes?.trade_name_text || '');
+  const attributes = parsed?.attributes || {};
+  const hasDisambiguatingAttribute = Boolean(
+    attributes.dosage_form ||
+    (attributes.strengths || []).length ||
+    (attributes.volumes || []).length ||
+    (Number.isInteger(attributes.pack_count) && attributes.pack_count > 0),
+  );
+
+  if (!hasDisambiguatingAttribute) return [];
+  if (!tradeNameText || !/[a-z]/iu.test(tradeNameText)) return [];
+
+  const transliterated = normalizeQuery(transliterateLatinToCyrillic(tradeNameText));
+  if (!transliterated || transliterated === tradeNameText) return [];
+
+  return [buildTradeNameVariantParsed(parsed, transliterated)].filter(Boolean);
+}
+
+function buildProfileSignature(kind, parsed) {
+  const attributes = parsed?.attributes || {};
+  const tradeNameText = normalizeQuery(attributes.trade_name_text || '');
+  const dosageForm = normalizeQuery(attributes.dosage_form || '');
+  const strengthTexts = normalizeTextList(
+    (attributes.strengths || []).map((strength) => strength?.text),
+  ).map((text) => normalizeQuery(text));
+  const volumeTexts = normalizeTextList(
+    (attributes.volumes || []).map((volume) => volume?.text),
+  ).map((text) => normalizeQuery(text));
+  const pack = Number.isInteger(attributes.pack_count) ? attributes.pack_count : '';
+  const productType = String(attributes.product_type || '')
+    .trim()
+    .toLowerCase();
+
+  return JSON.stringify([
+    kind,
+    tradeNameText,
+    dosageForm,
+    strengthTexts,
+    volumeTexts,
+    pack,
+    productType,
+  ]);
+}
+
+function buildLookupProfile(kind, parsed, rawName) {
+  if (!parsed?.attributes?.trade_name_text) return null;
+
+  return {
+    kind,
+    searchMode: kind,
+    rawName,
+    parsed,
+  };
+}
+
+function buildQueryLookupProfiles(rawName, overrides = {}) {
+  const parsed = applyAttributeOverrides(parseMedicineQuery(rawName), overrides);
+  const profiles = [];
+  const seen = new Set();
+
+  function add(kind, profileParsed) {
+    const profile = buildLookupProfile(kind, profileParsed, rawName);
+    if (!profile) return;
+
+    const signature = buildProfileSignature(kind, profileParsed);
+    if (seen.has(signature)) return;
+    seen.add(signature);
+    profiles.push(profile);
+  }
+
+  if (
+    parsed?.attributes?.trade_name_text &&
+    !isBrandOnlyProductType(parsed?.attributes?.product_type)
+  ) {
+    add('structured', parsed);
+    for (const variantParsed of buildStructuredTradeNameVariantParses(parsed)) {
+      add('structured', variantParsed);
+    }
+    add('trade_only', buildTradeOnlyParsed(parsed));
+  }
+
+  add('brand_only', buildBrandOnlyParsed(parsed, rawName));
+
+  return profiles;
+}
+
+function buildAliasTextsFromProfile(profile) {
+  if (!profile?.parsed?.attributes?.trade_name_text) return [];
+
+  const attributes = profile.parsed.attributes;
+  const texts = new Set();
+  const tradeNameText = normalizeQuery(attributes.trade_name_text || '');
+
+  if (tradeNameText) texts.add(tradeNameText);
+
+  if (profile.kind === 'structured') {
+    const parts = [
+      tradeNameText,
+      normalizeQuery(attributes.dosage_form || ''),
+      ...normalizeTextList((attributes.strengths || []).map((strength) => strength?.text)).map(
+        (text) => normalizeQuery(text),
+      ),
+      ...normalizeTextList((attributes.volumes || []).map((volume) => volume?.text)).map((text) =>
+        normalizeQuery(text),
+      ),
+    ].filter(Boolean);
+
+    if (parts.length) {
+      texts.add(parts.join(' '));
+    }
+  }
+
+  return [...texts];
+}
+
+function buildMedicineSearchAliases(name, details = {}) {
+  const profiles = buildQueryLookupProfiles(name, {
+    dosage_form: details?.dosage_form,
+    strength: details?.strength,
+    volume: details?.volume,
+  });
+  const aliases = new Set();
+
+  for (const profile of profiles) {
+    for (const candidateText of buildAliasTextsFromProfile(profile)) {
+      for (const variant of buildQueryVariants(candidateText)) {
+        if (variant) aliases.add(variant);
+      }
+    }
+  }
+
+  return aliases.size ? [...aliases].join(' ') : null;
+}
+
+module.exports = {
+  parseTradeName,
+  normalizeStoredLookupValue,
+  extractMedicineDetails,
+  buildQueryLookupProfiles,
+  buildMedicineSearchAliases,
+  isBrandOnlyProductType,
+};

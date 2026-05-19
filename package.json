@@ -1,0 +1,21 @@
+{
+  "name": "pharmacy-medicine-parser",
+  "version": "0.1.0",
+  "description": "Medicine query parser and PostgreSQL search query builder extracted from pharmacy-analytics.",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./parser": "./src/common/parser/index.js",
+    "./query-builder": "./src/common/parser/query-builder.js",
+    "./lookup-profiles": "./src/common/medicine-lookup-profiles.js",
+    "./fuzzy-search": "./src/utils/medicine-fuzzy-search.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "files": [
+    "src"
+  ]
+}
