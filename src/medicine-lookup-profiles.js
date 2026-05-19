@@ -1,5 +1,5 @@
 const { parseMedicineQuery } = require('./parser');
-const fuzzySearch = require('../utils/medicine-fuzzy-search');
+const fuzzySearch = require('./medicine-fuzzy-search');
 
 const buildQueryVariants = fuzzySearch.buildQueryVariants;
 const transliterateLatinToCyrillic =
@@ -68,15 +68,54 @@ function joinMeasurements(texts, name) {
   return texts.join(', ');
 }
 
+function strengthValueKey(strength) {
+  if (!strength) return null;
+  const unit = strength.unit ? String(strength.unit).toLowerCase() : '';
+  if (!unit) return null;
+  const values =
+    Array.isArray(strength.values) && strength.values.length > 0
+      ? strength.values
+      : strength.value != null
+        ? [strength.value]
+        : null;
+  if (!values || values.length === 0) return null;
+  return `${unit}|${values.join(',')}`;
+}
+
+function dedupeOverlappingStrengths(strengthObjects) {
+  // The parser can emit the same numerator chemistry twice for a single
+  // segment — once as a plain simple ("5 мг/0.1 мг") and once as the more
+  // specific ratio that retained the unit denominator ("5/0.1 мг/доз").
+  // The ratio carries strictly more information, so drop the bare simple
+  // duplicate to avoid joining both texts into a noisy compound string.
+  if (!Array.isArray(strengthObjects) || strengthObjects.length < 2) {
+    return strengthObjects || [];
+  }
+  const ratioKeys = new Set();
+  for (const strength of strengthObjects) {
+    if (strength?.kind === 'ratio') {
+      const key = strengthValueKey(strength);
+      if (key) ratioKeys.add(key);
+    }
+  }
+  if (ratioKeys.size === 0) return strengthObjects;
+  return strengthObjects.filter((strength) => {
+    if (strength?.kind !== 'simple') return true;
+    const key = strengthValueKey(strength);
+    return !key || !ratioKeys.has(key);
+  });
+}
+
 function pickSegmentMeasurements(attributes) {
-  const strengths = (attributes?.strengths || []).map((strength) => strength?.text).filter(Boolean);
+  const strengthObjects = dedupeOverlappingStrengths(attributes?.strengths || []);
+  const strengths = strengthObjects.map((strength) => strength?.text).filter(Boolean);
   const volumes = (attributes?.volumes || []).map((volume) => volume?.text).filter(Boolean);
 
   if (volumes.length || strengths.length !== 1) {
     return { strengths, volumes };
   }
 
-  const [singleStrength] = attributes.strengths || [];
+  const [singleStrength] = strengthObjects;
   if (singleStrength?.kind === 'simple' && VOLUME_LIKE_UNITS.has(singleStrength.unit)) {
     return {
       strengths: [],

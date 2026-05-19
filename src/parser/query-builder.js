@@ -1,3 +1,5 @@
+const { escapeLikePattern, normalizeSqlTerm } = require('../medicine-lookup-common');
+
 const BRAND_CANDIDATE_LIMIT_SINGLE = 50;
 const BRAND_CANDIDATE_LIMIT_MIN = 200;
 const BRAND_CANDIDATE_LIMIT_MAX = 250;
@@ -20,17 +22,6 @@ const TRADE_NAME_SCORE_PARTS = {
   trade_only: ['trade_name_score * 0.66'],
   brand_only: ['trade_name_score * 0.62', 'coalesce(name_score, 0) * 0.38'],
 };
-
-function normalizeSqlTerm(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/ё/g, 'е')
-    .trim();
-}
-
-function escapeLikePattern(value) {
-  return String(value || '').replace(/[\\%_]/g, '\\$&');
-}
 
 function buildDecimalVariants(value) {
   const normalized = normalizeSqlTerm(value);

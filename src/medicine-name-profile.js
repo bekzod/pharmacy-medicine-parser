@@ -244,7 +244,7 @@ function normalizePackValue(value) {
   return value === '1' ? null : value;
 }
 
-const { LATIN_TO_CYRILLIC, LATIN_HOMOGLYPH_RE } = require('../common/latin-to-cyrillic');
+const { LATIN_TO_CYRILLIC, LATIN_HOMOGLYPH_RE } = require('./latin-to-cyrillic');
 
 function normalizeLatinHomoglyphs(text) {
   return text.replace(/\S+/g, (word) => {

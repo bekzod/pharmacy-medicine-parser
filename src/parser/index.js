@@ -1,28 +1,23 @@
 const {
   normalizeMedicineFormPhrases,
   transliterateLatinToCyrillic,
-} = require('../../utils/medicine-fuzzy-search');
+} = require('../medicine-fuzzy-search');
 const { extractVendorCountryFromTokens } = require('../vendor-country');
 const {
   MEDICINE_FORM_NORMALIZERS,
   MEDICINE_FORM_PRIORITIES,
   parseDosageForm,
-} = require('../../utils/medicine-dosage-forms');
+} = require('../medicine-dosage-forms');
 const {
   MEDICINE_DESCRIPTOR_TOKENS,
   MEDICINE_FORM_TOKENS,
   MEDICINE_UNIT_TOKENS,
   normalizeMedicineToken,
-} = require('../../utils/medicine-name-profile');
+} = require('../medicine-name-profile');
 const { LATIN_TO_CYRILLIC, LATIN_HOMOGLYPH_RE } = require('../latin-to-cyrillic');
+const { TRADE_NAME_ABBREV_TOKEN_ALIASES } = require('../medicine-lookup-common');
 const TOKEN_RE =
   /\d+(?:\.\d+)?(?:x\d+|[a-zа-яё]+)?(?:-[a-zа-яё][a-zа-яё0-9]*)*|[a-zа-яё][a-zа-яё0-9]*(?:-[a-zа-яё0-9]+)*|%|\/|\+/giu;
-
-const TRADE_NAME_ABBREV_TOKEN_ALIASES = new Map([
-  ['ср', 'sr'],
-  ['мр', 'mr'],
-  ['дср', 'dsr'],
-]);
 
 // Russian descriptor / indication words that commonly trail pharmacy listings
 // and shouldn't pollute the trade-name signal. Keep tight to avoid dropping
@@ -153,41 +148,11 @@ const PARSER_NOISE_TOKENS = new Set([
   'вкус',
   'вкуса',
   'вкусом',
-  'мята',
-  'мяты',
-  'мятой',
-  'мятный',
-  'мятная',
-  'мятное',
-  'мятные',
-  'лимон',
-  'лимона',
-  'лимоном',
-  'лимонный',
-  'лимонная',
-  'лимонное',
-  'лимонные',
-  'апельсин',
-  'апельсина',
-  'апельсином',
-  'апельсиновый',
-  'апельсиновая',
-  'апельсиновое',
-  'апельсиновые',
-  'ананас',
-  'ананаса',
-  'ананасом',
-  'ананасовый',
-  'ананасовая',
-  'ананасовое',
-  'ананасовые',
-  'клубника',
-  'клубники',
-  'клубникой',
-  'клубничный',
-  'клубничная',
-  'клубничное',
-  'клубничные',
+  // NOTE: flavor names (мята, лимон, апельсин, ананас, клубника, etc.) are
+  // intentionally NOT in PARSER_NOISE_TOKENS — they often disambiguate SKUs
+  // (e.g. "Терафлю лимон" vs "Терафлю мед"). Parenthesized flavor tokens
+  // still get stripped via collectParenthesizedNoiseTokens since paren
+  // content with normalized word tokens is treated as annotation noise.
   'защитный',
   'защитная',
   'защитное',
@@ -1414,24 +1379,46 @@ function mergeSameUnitSlashStrength(strengths, normalizedText) {
   const slashStrength = buildSameUnitSlashStrength(normalizedText);
   if (!slashStrength) return strengths;
 
-  const alreadyPresent = strengths.some(
+  const sameValuesAlreadyPresent = (strength) =>
+    strength &&
+    strength.unit === slashStrength.unit &&
+    Array.isArray(strength.values) &&
+    strength.values.length === slashStrength.values.length &&
+    strength.values.every((value, index) => value === slashStrength.values[index]);
+
+  // Already represented (as either a multi-value simple or as a ratio
+  // with matching numerator values, e.g. inhalation per-dose ratios).
+  if (strengths.some(sameValuesAlreadyPresent)) return strengths;
+
+  // Combination tablets / capsules expressed as duplicated-unit slash
+  // (e.g. "4 мг/10 мг", "75 мг/15.2 мг") describe distinct active
+  // components and should stay as individual simple strengths. The merge
+  // only applies when the parser dedupe collapsed an equal-value
+  // split-vial pattern (e.g. "25 мг/25 мг") into a single strength. For
+  // other units (ме, ед, г, мкг) the slash form is canonically stored as
+  // a single multi-value simple, so merge unconditionally.
+  const slashValues = slashStrength.values;
+  const allValuesEqual = slashValues.every((value) => value === slashValues[0]);
+  const separateSimples = strengths.filter(
     (strength) =>
       strength?.kind === 'simple' &&
       strength.unit === slashStrength.unit &&
-      Array.isArray(strength.values) &&
-      strength.values.length === slashStrength.values.length &&
-      strength.values.every((value, index) => value === slashStrength.values[index]),
+      strength.value != null &&
+      slashValues.includes(strength.value),
   );
-  if (alreadyPresent) return strengths;
+  const hasDistinctSeparates = separateSimples.length >= 2;
+  if (slashStrength.unit === 'мг' && hasDistinctSeparates && !allValuesEqual) {
+    return strengths;
+  }
 
-  const slashValues = new Set(slashStrength.values.map((value) => `${value}`));
+  const slashValuesSet = new Set(slashValues.map((value) => `${value}`));
   const filtered = strengths.filter(
     (strength) =>
       !(
         strength?.kind === 'simple' &&
         strength.unit === slashStrength.unit &&
         strength.value != null &&
-        slashValues.has(`${strength.value}`)
+        slashValuesSet.has(`${strength.value}`)
       ),
   );
 

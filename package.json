@@ -7,14 +7,15 @@
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",
-    "./parser": "./src/common/parser/index.js",
-    "./query-builder": "./src/common/parser/query-builder.js",
-    "./lookup-profiles": "./src/common/medicine-lookup-profiles.js",
-    "./fuzzy-search": "./src/utils/medicine-fuzzy-search.js",
-    "./medicine-dosage-forms": "./src/utils/medicine-dosage-forms.js",
-    "./medicine-name-profile": "./src/utils/medicine-name-profile.js",
-    "./vendor-country": "./src/common/vendor-country.js",
-    "./latin-to-cyrillic": "./src/common/latin-to-cyrillic.js"
+    "./parser": "./src/parser/index.js",
+    "./query-builder": "./src/parser/query-builder.js",
+    "./lookup-profiles": "./src/medicine-lookup-profiles.js",
+    "./fuzzy-search": "./src/medicine-fuzzy-search.js",
+    "./medicine-dosage-forms": "./src/medicine-dosage-forms.js",
+    "./medicine-name-profile": "./src/medicine-name-profile.js",
+    "./vendor-country": "./src/vendor-country.js",
+    "./latin-to-cyrillic": "./src/latin-to-cyrillic.js",
+    "./medicine-lookup-common": "./src/medicine-lookup-common.js"
   },
   "scripts": {
     "test": "node --test"
