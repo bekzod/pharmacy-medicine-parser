@@ -10,7 +10,11 @@
     "./parser": "./src/common/parser/index.js",
     "./query-builder": "./src/common/parser/query-builder.js",
     "./lookup-profiles": "./src/common/medicine-lookup-profiles.js",
-    "./fuzzy-search": "./src/utils/medicine-fuzzy-search.js"
+    "./fuzzy-search": "./src/utils/medicine-fuzzy-search.js",
+    "./medicine-dosage-forms": "./src/utils/medicine-dosage-forms.js",
+    "./medicine-name-profile": "./src/utils/medicine-name-profile.js",
+    "./vendor-country": "./src/common/vendor-country.js",
+    "./latin-to-cyrillic": "./src/common/latin-to-cyrillic.js"
   },
   "scripts": {
     "test": "node --test"
