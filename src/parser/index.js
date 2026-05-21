@@ -1028,6 +1028,14 @@ function isVitaminDTradeNameToken(token) {
   return ['д-3', 'д3', 'd-3', 'd3'].includes(String(token || '').toLowerCase());
 }
 
+function isLevothyroxineTradeName(tradeNameTokens) {
+  const normalizedTradeTokens = (tradeNameTokens || []).map((token) =>
+    String(token || '').toLowerCase(),
+  );
+
+  return normalizedTradeTokens.some((token) => /^l-тироксин$/iu.test(token));
+}
+
 function maybeInferVitaminDStrength({
   tokens,
   consumedIndexes,
@@ -1090,11 +1098,9 @@ function maybeInferVitaminDStrength({
 
 // Oral solid forms (tablet, capsule, etc.) where pharmacy listings often
 // abbreviate the strength as a bare number adjacent to the form token. The
-// implicit unit is мг — e.g. "АЗИТОКОМ-500 ТАБ №3" → 500 мг, "Сумамед 250 капс
-// №6" → 250 мг. Only fire when no explicit strength has been parsed and an
-// unambiguous candidate exists; pack-from-pre-form already consumes adjacent
-// integers when packCount is null, so this typically fires only when pack was
-// supplied separately (e.g. via №N or a count multiplier).
+// implicit unit is usually мг — e.g. "АЗИТОКОМ-500 ТАБ №3" → 500 мг,
+// "Сумамед 250 капс №6" → 250 мг. L-тироксин tablets are conventionally listed
+// in micrograms, so bare "100" maps to 100 мкг for that brand.
 const ORAL_SOLID_FORMS_WITH_IMPLICIT_MG = new Set([
   'tablet',
   'capsule',
@@ -1129,9 +1135,11 @@ function maybeInferOralSolidStrength({
   if (candidateIndexes.length !== 1) return;
 
   const strengthIndex = candidateIndexes[0];
+  const inferredUnit =
+    dosageForm === 'tablet' && isLevothyroxineTradeName(tradeNameTokens) ? 'мкг' : 'мг';
   const strengthNode = buildSimpleStrengthNode(
     [tokens[strengthIndex].numericValue],
-    'мг',
+    inferredUnit,
     strengthIndex,
     strengthIndex,
   );
