@@ -90,6 +90,7 @@ function formatMeasurementNumber(value) {
 }
 
 function normalizeMeasurementValue(value, unit) {
+  if (value == null) return null;
   const n = Number(value);
   if (!Number.isFinite(n) || !unit) return null;
   const normalizedUnit = String(unit).toLowerCase();
@@ -289,6 +290,7 @@ function buildVolumeSearchTexts(volumes) {
 
 function unitValuesMatch(left, right) {
   if (!left || !right) return false;
+  if (left.value == null || right.value == null) return false;
   const leftValue = Number(left.value);
   const rightValue = Number(right.value);
   if (!Number.isFinite(leftValue) || !Number.isFinite(rightValue)) return false;

@@ -27,6 +27,11 @@ const PARSER_NOISE_TOKENS = new Set([
   'антигистаминный',
   'антигистаминная',
   'антигистаминные',
+  'дезинфир',
+  'дезинфицирующий',
+  'дезинфицирующая',
+  'дезинфицирующее',
+  'дезинфицирующие',
   'средство',
   'средства',
   'средств',
@@ -740,6 +745,30 @@ function buildMeasurementNode(numberToken, unitToken, startIndex, endIndex) {
   };
 }
 
+function buildMeasurementNodeFromStrength(strengthNode) {
+  if (!strengthNode || strengthNode.kind !== 'simple' || !strengthNode.unit) return null;
+
+  if (strengthNode.value != null) {
+    return buildMeasurementNode(
+      { value: String(strengthNode.value), normalizedValue: null },
+      { normalizedValue: strengthNode.unit },
+      strengthNode.startIndex,
+      strengthNode.endIndex,
+    );
+  }
+
+  const values = Array.isArray(strengthNode.values) ? strengthNode.values : [];
+  if (values.length < 2 || !values.every((value) => Number.isFinite(value))) return null;
+
+  return {
+    text: strengthNode.text,
+    value: null,
+    unit: strengthNode.unit,
+    startIndex: strengthNode.startIndex,
+    endIndex: strengthNode.endIndex,
+  };
+}
+
 function buildSimpleStrengthNode(values, unit, startIndex, endIndex) {
   // DB stores multi-value combination strengths with the unit duplicated on
   // both sides of the slash (e.g. "5 мг/10 мг"). Match that format so strict
@@ -962,6 +991,51 @@ function buildStrengthNode(tokens, startIndex) {
     numeratorUnitToken.normalizedValue,
     startIndex,
     sequence.nextIndex,
+  );
+}
+
+const MASS_UNITS_FOR_DOSE_INFERENCE = new Set(['мкг', 'мг', 'г']);
+
+function inferMassUnitFromConcentration(strengthCandidates) {
+  for (let i = strengthCandidates.length - 1; i >= 0; i -= 1) {
+    const strength = strengthCandidates[i];
+    if (
+      strength?.kind === 'ratio' &&
+      MASS_UNITS_FOR_DOSE_INFERENCE.has(strength.unit) &&
+      strength.denominator?.unit === 'мл'
+    ) {
+      return strength.unit;
+    }
+  }
+
+  return null;
+}
+
+function inferMultiValuePerDoseStrength(strengthNode, strengthCandidates) {
+  const values = Array.isArray(strengthNode?.values) ? strengthNode.values : [];
+  const hasFractionalValue = values.some(
+    (value) => Number.isFinite(value) && !Number.isInteger(value),
+  );
+  if (
+    strengthNode?.kind !== 'simple' ||
+    strengthNode.unit !== 'доз' ||
+    strengthNode.value != null ||
+    values.length < 2 ||
+    !hasFractionalValue ||
+    !values.every((value) => Number.isFinite(value) && value > 0)
+  ) {
+    return null;
+  }
+
+  const inferredUnit = inferMassUnitFromConcentration(strengthCandidates);
+  if (!inferredUnit) return null;
+
+  return buildRatioStrengthNode(
+    values,
+    inferredUnit,
+    { value: null, unit: 'доз' },
+    strengthNode.startIndex,
+    strengthNode.endIndex,
   );
 }
 
@@ -1753,15 +1827,19 @@ function parseMedicineQuery(rawQuery) {
     const isVolumeNode =
       strengthNode.kind === 'simple' &&
       (unitFamily === 'volume' || unitFamily === 'length' || isDoseCount);
+    if (isDoseCount) {
+      const perDoseStrength = inferMultiValuePerDoseStrength(strengthNode, strengthCandidates);
+      if (perDoseStrength) {
+        strengthCandidates.push(perDoseStrength);
+        consumeRange(strengthNode.startIndex, strengthNode.endIndex, 'strength');
+        index = strengthNode.endIndex;
+        continue;
+      }
+    }
+
     if (isVolumeNode) {
-      volumeCandidates.push(
-        buildMeasurementNode(
-          { value: String(strengthNode.value), normalizedValue: null },
-          { normalizedValue: strengthNode.unit },
-          strengthNode.startIndex,
-          strengthNode.endIndex,
-        ),
-      );
+      const measurementNode = buildMeasurementNodeFromStrength(strengthNode);
+      if (measurementNode) volumeCandidates.push(measurementNode);
     } else {
       strengthCandidates.push(strengthNode);
     }
