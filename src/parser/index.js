@@ -579,9 +579,7 @@ function normalizeMedicineQuery(rawQuery) {
     .replace(/(\d),(\d)/gu, '$1.$2')
     .replace(/(р\s*[-/]\s*р)(?=\d)/giu, '$1 ')
     .replace(/(\d)(мкг|мг|мл|кг|г|л|ме|ед)\s*\/\s+(?=\d)/giu, '$1$2/')
-    .replace(/(?<=%)\.(?=\d)/gu, ' ')
-    .replace(/%\/(?=\d)/gu, '% ')
-    .replace(/%(?=\d)/gu, '% ')
+    .replace(/%[./]?(?=\d)/gu, '% ')
     .replace(/(мкг|мг|мл|кг|г|л|%)-(?=\d)/giu, '$1 ')
     .replace(/(\d)\s*[х×x]\s*(\d)/gu, '$1x$2')
     .replace(
@@ -1227,14 +1225,6 @@ function isVitaminDTradeNameToken(token) {
   return ['д-3', 'д3', 'd-3', 'd3'].includes(String(token || '').toLowerCase());
 }
 
-function isLevothyroxineTradeName(tradeNameTokens) {
-  const normalizedTradeTokens = (tradeNameTokens || []).map((token) =>
-    String(token || '').toLowerCase(),
-  );
-
-  return normalizedTradeTokens.some((token) => /^l-тироксин$/iu.test(token));
-}
-
 function maybeInferVitaminDStrength({
   tokens,
   consumedIndexes,
@@ -1295,6 +1285,28 @@ function maybeInferVitaminDStrength({
   }
 }
 
+// Scan the token stream for the single unconsumed NUMBER in [min, max] eligible
+// to carry an inferred strength/volume. Returns its index, or null when there is
+// no unambiguous candidate (zero or more than one). Shared by the maybeInfer*
+// helpers below, which differ only in range, unit, and eligibility guard.
+function findSoleNumericCandidate(
+  tokens,
+  { consumedIndexes, packCount, min, max, requireInteger = true, allowPackCountMatch = false },
+) {
+  const candidateIndexes = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (consumedIndexes.has(index)) continue;
+    const token = tokens[index];
+    if (token?.type !== 'NUMBER') continue;
+    if (!Number.isFinite(token.numericValue)) continue;
+    if (requireInteger && !Number.isInteger(token.numericValue)) continue;
+    if (token.numericValue < min || token.numericValue > max) continue;
+    if (packCount != null && token.numericValue === packCount && !allowPackCountMatch) continue;
+    candidateIndexes.push(index);
+  }
+  return candidateIndexes.length === 1 ? candidateIndexes[0] : null;
+}
+
 const ENZYME_ACTIVITY_TRADE_TOKENS = new Set([
   'креон',
   'креон®',
@@ -1314,26 +1326,16 @@ function maybeInferEnzymeActivityStrength({
 }) {
   if (strengthCandidates.length > 0) return;
 
-  const normalizedTradeTokens = (tradeNameTokens || []).map((token) =>
-    String(token || '').toLowerCase(),
-  );
-  if (!normalizedTradeTokens.some((token) => ENZYME_ACTIVITY_TRADE_TOKENS.has(token))) return;
+  if (!tradeNameTokensInclude(tradeNameTokens, ENZYME_ACTIVITY_TRADE_TOKENS)) return;
 
-  const candidateIndexes = [];
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (consumedIndexes.has(index)) continue;
-    const token = tokens[index];
-    if (token?.type !== 'NUMBER') continue;
-    if (!Number.isFinite(token.numericValue)) continue;
-    if (!Number.isInteger(token.numericValue)) continue;
-    if (token.numericValue < 10000 || token.numericValue > 100000) continue;
-    if (packCount != null && token.numericValue === packCount) continue;
-    candidateIndexes.push(index);
-  }
+  const strengthIndex = findSoleNumericCandidate(tokens, {
+    consumedIndexes,
+    packCount,
+    min: 10000,
+    max: 100000,
+  });
+  if (strengthIndex == null) return;
 
-  if (candidateIndexes.length !== 1) return;
-
-  const strengthIndex = candidateIndexes[0];
   const strengthNode = buildSimpleStrengthNode(
     [tokens[strengthIndex].numericValue],
     'ед',
@@ -1366,6 +1368,8 @@ const ORAL_SOLID_TRADES_WITH_SLASH_IMPLICIT_MG = new Set(['ситадиаб']);
 const ORAL_SOLID_TRADES_WITH_IMPLICIT_MG = new Set(['йодомиг', 'сиофор']);
 const POWDER_TRADES_WITH_IMPLICIT_MG = new Set(['ноофен']);
 const ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG = new Set(['йодомарин']);
+// L-тироксин tablets are conventionally listed in micrograms.
+const LEVOTHYROXINE_TABLET_TRADES = new Set(['l-тироксин']);
 const LIQUID_FORMS_WITH_IMPLICIT_ML_VOLUME = new Set(['syrup']);
 
 function tradeNameTokensInclude(tradeNameTokens, tokenSet) {
@@ -1434,7 +1438,6 @@ function maybeInferOralSolidStrength({
     }
   }
 
-  const candidateIndexes = [];
   const allowLowStrength = tradeNameTokensInclude(
     tradeNameTokens,
     ORAL_SOLID_TRADES_WITH_LOW_IMPLICIT_MG,
@@ -1443,25 +1446,17 @@ function maybeInferOralSolidStrength({
     tradeNameTokens,
     ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG,
   );
-  const minStrength = allowLowStrength ? 1 : 25;
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (consumedIndexes.has(index)) continue;
-    const token = tokens[index];
-    if (token?.type !== 'NUMBER') continue;
-    if (!Number.isFinite(token.numericValue)) continue;
-    if (!Number.isInteger(token.numericValue)) continue;
-    if (token.numericValue < minStrength || token.numericValue > 5000) continue;
-    if (packCount != null && token.numericValue === packCount && !allowStrengthMatchingPackCount) {
-      continue;
-    }
-    candidateIndexes.push(index);
-  }
+  const strengthIndex = findSoleNumericCandidate(tokens, {
+    consumedIndexes,
+    packCount,
+    min: allowLowStrength ? 1 : 25,
+    max: 5000,
+    allowPackCountMatch: allowStrengthMatchingPackCount,
+  });
+  if (strengthIndex == null) return;
 
-  if (candidateIndexes.length !== 1) return;
-
-  const strengthIndex = candidateIndexes[0];
   const inferredUnit =
-    (dosageForm === 'tablet' && isLevothyroxineTradeName(tradeNameTokens)) ||
+    (dosageForm === 'tablet' && tradeNameTokensInclude(tradeNameTokens, LEVOTHYROXINE_TABLET_TRADES)) ||
     tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG)
       ? 'мкг'
       : 'мг';
@@ -1490,20 +1485,13 @@ function maybeInferLiquidPackageVolume({
   if (!LIQUID_FORMS_WITH_IMPLICIT_ML_VOLUME.has(dosageForm)) return;
   if (volumeCandidates.length > 0) return;
 
-  const candidateIndexes = [];
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (consumedIndexes.has(index)) continue;
-    const token = tokens[index];
-    if (token?.type !== 'NUMBER') continue;
-    if (!Number.isFinite(token.numericValue)) continue;
-    if (!Number.isInteger(token.numericValue)) continue;
-    if (token.numericValue < 10 || token.numericValue > 1000) continue;
-    candidateIndexes.push(index);
-  }
+  const volumeIndex = findSoleNumericCandidate(tokens, {
+    consumedIndexes,
+    min: 10,
+    max: 1000,
+  });
+  if (volumeIndex == null) return;
 
-  if (candidateIndexes.length !== 1) return;
-
-  const volumeIndex = candidateIndexes[0];
   volumeCandidates.push(
     buildMeasurementNode(
       { value: tokens[volumeIndex].value, normalizedValue: null },
@@ -1573,21 +1561,14 @@ function maybeInferPowderMilligramStrength({
     return;
   }
 
-  const candidateIndexes = [];
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (consumedIndexes.has(index)) continue;
-    const token = tokens[index];
-    if (token?.type !== 'NUMBER') continue;
-    if (!Number.isFinite(token.numericValue)) continue;
-    if (!Number.isInteger(token.numericValue)) continue;
-    if (token.numericValue < 25 || token.numericValue > 5000) continue;
-    if (packCount != null && token.numericValue === packCount) continue;
-    candidateIndexes.push(index);
-  }
+  const strengthIndex = findSoleNumericCandidate(tokens, {
+    consumedIndexes,
+    packCount,
+    min: 25,
+    max: 5000,
+  });
+  if (strengthIndex == null) return;
 
-  if (candidateIndexes.length !== 1) return;
-
-  const strengthIndex = candidateIndexes[0];
   const strengthNode = buildSimpleStrengthNode(
     [tokens[strengthIndex].numericValue],
     'мг',
@@ -2456,13 +2437,21 @@ function parseMedicineQuery(rawQuery) {
     remainingTokens: tradeNameResidueTokens,
   } = extractVendorCountryFromTokens(uniqueResidueTokens);
   const parenNoiseTokens = collectParenthesizedNoiseTokens(rawQuery);
-  const residueTokenCounts = residueTokens.reduce((counts, token) => {
-    counts.set(token, (counts.get(token) || 0) + 1);
-    return counts;
-  }, new Map());
-  const removableParenNoiseTokens = new Set(
-    [...parenNoiseTokens].filter((token) => (residueTokenCounts.get(token) || 0) <= 1),
-  );
+  // A paren-noise token that appears more than once in the residue is likely
+  // meaningful (not just annotation), so only single-occurrence tokens are
+  // removable. Skip the work entirely when there's no paren noise.
+  const removableParenNoiseTokens = new Set();
+  if (parenNoiseTokens.size) {
+    const seenResidueTokens = new Set();
+    const duplicateResidueTokens = new Set();
+    for (const token of residueTokens) {
+      if (seenResidueTokens.has(token)) duplicateResidueTokens.add(token);
+      else seenResidueTokens.add(token);
+    }
+    for (const token of parenNoiseTokens) {
+      if (!duplicateResidueTokens.has(token)) removableParenNoiseTokens.add(token);
+    }
+  }
   const filteredResidueTokens = removableParenNoiseTokens.size
     ? tradeNameResidueTokens.filter((token) => !removableParenNoiseTokens.has(token))
     : tradeNameResidueTokens;
