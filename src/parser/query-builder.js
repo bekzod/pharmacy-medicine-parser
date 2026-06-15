@@ -588,11 +588,14 @@ function buildMedicineSearchQuery(parsedQuery, options = {}) {
       'strengthFilter',
       strengthSearchTexts,
     );
-    candidateBaseConditions.push(
-      strictParsedAttributeFilters
-        ? buildExactAnyCondition([normalizedStrengthExpr, normalizedVolumeExpr], strengthFilterKeys)
-        : buildLikeAnyCondition([normalizedAttributeOrNameExpr], strengthFilterKeys),
-    );
+    const strengthFilterCondition = strictParsedAttributeFilters
+      ? buildExactAnyCondition([normalizedStrengthExpr, normalizedVolumeExpr], strengthFilterKeys)
+      : buildLikeAnyCondition([normalizedAttributeOrNameExpr], strengthFilterKeys);
+    // A candidate with no stored strength cannot contradict the parsed strength (omission is
+    // not a mismatch), so admit it and let scoring rank it — otherwise an exact-name match with
+    // a NULL/blank strength (e.g. a trade name stored without dosage) is dropped from recall in
+    // favour of a trigram-similar different brand that merely happens to carry the parsed strength.
+    candidateBaseConditions.push(`(${strengthFilterCondition} OR ${normalizedStrengthExpr} = '')`);
   }
   if (requireParsedAttributeMatch && volumeSearchTexts.length) {
     const volumeFilterKeys = appendReplacementsWithVariants(

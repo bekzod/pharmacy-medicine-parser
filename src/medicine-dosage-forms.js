@@ -9,6 +9,7 @@ const MEDICINE_DOSAGE_FORMS = [
     form: 'tablet',
     parsePatterns: [
       wholeToken('таб\\.?'),
+      wholeToken('табл\\.?'),
       /таблетк/iu,
       wholeToken('таблет\\.?'),
       wholeToken('драж\\.?'),
@@ -110,13 +111,14 @@ const MEDICINE_DOSAGE_FORMS = [
       /капли(?:\s+глаз\.?)?/iu,
       /гл\.?\s*капли/iu,
       wholeToken('капл\\.?'),
+      wholeToken('к-ли'),
       /глазн\.?\s*капл/iu,
       /ушн\.?\s*капл/iu,
     ],
     profile: {
       token: 'капли',
       priority: 4,
-      tokenPatterns: [/^(капл\.?|капля|капли|drops?)$/u],
+      tokenPatterns: [/^(капл\.?|капля|капли|к-ли|drops?)$/u],
     },
   },
   {
