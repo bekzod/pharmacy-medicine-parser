@@ -129,6 +129,7 @@ const PARSER_NOISE_TOKENS = new Set([
   'сахарная',
   'сахарное',
   'сахарные',
+  'сахара',
   'сахарной',
   'оболочка',
   'оболочки',
@@ -155,9 +156,8 @@ const PARSER_NOISE_TOKENS = new Set([
   'вкусом',
   // NOTE: flavor names (мята, лимон, апельсин, ананас, клубника, etc.) are
   // intentionally NOT in PARSER_NOISE_TOKENS — they often disambiguate SKUs
-  // (e.g. "Терафлю лимон" vs "Терафлю мед"). Parenthesized flavor tokens
-  // still get stripped via collectParenthesizedNoiseTokens since paren
-  // content with normalized word tokens is treated as annotation noise.
+  // (e.g. "Терафлю лимон" vs "Терафлю мед"). Common parenthesized flavors
+  // are preserved by PARENTHESIZED_VARIANT_TOKENS below.
   'защитный',
   'защитная',
   'защитное',
@@ -199,9 +199,13 @@ const PARSER_NOISE_TOKENS = new Set([
   'инъекц',
   'инъекций',
   'инъекции',
+  'иньек',
   'инфузий',
   'инфузии',
+  'ингаляц',
+  'ингаляции',
   'иг',
+  'рр',
   // Pharmacy-listing trailing abbreviations that aren't ingredients or brand
   // tokens. "ЖР" appears at the tail of solution listings (e.g.
   // "ГЛЮКОЗА Р-Р 5% 500МЛ ЖР") and pollutes the trade-name signal.
@@ -210,6 +214,33 @@ const PARSER_NOISE_TOKENS = new Set([
   // category prefix, not part of the brand. Appears as a leading token in
   // catalog rows like "бад наридон форте капс. №20".
   'бад',
+]);
+const FLAVOR_VARIANT_TOKENS = [
+  'апельсин',
+  'апельсиновый',
+  'ананас',
+  'вишня',
+  'классический',
+  'клубника',
+  'клубники',
+  'лимон',
+  'лимонный',
+  'малина',
+  'мед',
+  'мёд',
+  'мята',
+  'норм',
+  'эвкалипт',
+];
+const PARENTHESIZED_VARIANT_TOKENS = new Set([
+  'классик',
+  'universal',
+  'горького',
+  'левый',
+  'левая',
+  'правый',
+  'правая',
+  ...FLAVOR_VARIANT_TOKENS,
 ]);
 
 const UNIT_FAMILY_BY_VALUE = new Map([
@@ -234,6 +265,7 @@ const SYRINGE_RE = /шприц(?!-?\s*руч)(?:[а-я]*)?/iu;
 const PREFILLED_RE = /преднаполненн|(?:предварительно\s+)?(?:наполненн|заполненн)/iu;
 const PAREN_GROUP_RE = /\(([^()]+)\)/gu;
 const COUNT_BEFORE_FORM_DOSAGE_FORMS = new Set(['capsule', 'tablet']);
+const SIZE_CONTEXT_TOKENS = new Set(['р', 'раз', 'разм', 'размер']);
 
 const CONTAINER_NORMALIZERS = [
   {
@@ -268,7 +300,7 @@ const CONTAINER_NORMALIZERS = [
     containerType: 'bottle',
   },
   {
-    pattern: /^(пакетик[а-я]*|пакет\.?|пакеты|паке\.|саше|стик[а-я]*)$/u,
+    pattern: /^(пакетик[а-я]*|пакет(?:ы|ов|а|е|ам|ами|ах)?|пакет\.?|паке\.|саше|стик[а-я]*)$/u,
     containerType: 'sachet',
   },
 ];
@@ -282,6 +314,7 @@ const CONTAINER_NORMALIZERS = [
 // "р-р" / "р/р" both appear in pharmacy listings; treat them as equivalent.
 const RP = String.raw`р\s*[-/]\s*р`;
 const DOSAGE_FORM_ROUTE_PATTERNS = [
+  { route: 'oral', pattern: /для\s+приема\s+внутрь/iu },
   { route: 'infusion', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*инф[а-я]*\\.?`, 'iu') },
   { route: 'infusion', pattern: new RegExp(`${RP}\\.?\\s*для\\s*\\/?\\s*инф[а-я]*\\.?`, 'iu') },
   { route: 'infusion', pattern: new RegExp(`${RP}\\.?\\s*инф[а-я]*\\.?`, 'iu') },
@@ -456,6 +489,14 @@ function normalizeRawSegment(segment) {
   const packMatch = value.match(/^n(\d+)$/u);
   if (packMatch) return `n ${packMatch[1]}`;
 
+  const attachedUnitWithSuffixMatch = value.match(
+    /^(\d+(?:\.\d+)?)([a-zа-яё]+)-[a-zа-яё0-9]{1,6}$/u,
+  );
+  if (attachedUnitWithSuffixMatch) {
+    const normalizedUnit = normalizeAttachedUnit(attachedUnitWithSuffixMatch[2]);
+    if (normalizedUnit) return `${attachedUnitWithSuffixMatch[1]} ${normalizedUnit}`;
+  }
+
   const percentMatch = value.match(/^(\d+(?:\.\d+)?)(%|проц)$/u);
   if (percentMatch) return `${percentMatch[1]}%`;
 
@@ -536,8 +577,16 @@ function normalizeMedicineQuery(rawQuery) {
       ' ',
     )
     .replace(/(\d),(\d)/gu, '$1.$2')
+    .replace(/(р\s*[-/]\s*р)(?=\d)/giu, '$1 ')
+    .replace(/(\d)(мкг|мг|мл|кг|г|л|ме|ед)\s*\/\s+(?=\d)/giu, '$1$2/')
+    .replace(/%[./]?(?=\d)/gu, '% ')
+    .replace(/(мкг|мг|мл|кг|г|л|%)-(?=\d)/giu, '$1 ')
     .replace(/(\d)\s*[х×x]\s*(\d)/gu, '$1x$2')
-    .replace(/(\d+)(мм|см|м)\s*[хx×]\s*(\d+)/gu, '$1 $2 х $3')
+    .replace(
+      /(\d+(?:\.\d+)?)(мм|см|м)\s*[*хx×]\s*(\d+(?:\.\d+)?)(мм|см|м)?/giu,
+      (match, left, leftUnit, right, rightUnit) =>
+        `${left} ${leftUnit.toLowerCase()} х ${right} ${(rightUnit || leftUnit).toLowerCase()}`,
+    )
     .replace(/\bsoft\s*gels?\b/giu, 'softgel')
     .replace(/\bveg\s*caps(?:ule)?s?\b/giu, 'vegcaps')
     .replace(/\b(\d{1,2}(?:\s+\d{3})+|[1-9]\d{2}(?:\s+0{3})+)\b/gu, (value) =>
@@ -658,6 +707,53 @@ function classifyWordToken(token) {
   };
 }
 
+const BARE_KAP_DROP_CONTEXT_RE = /^(глаз|наз|нос|уш|офтальм)/u;
+
+function hasVolumeMeasurementAfter(tokens, index, lookahead = 6) {
+  const end = Math.min(tokens.length - 1, index + lookahead);
+  for (let cursor = index + 1; cursor < end; cursor += 1) {
+    if (
+      tokens[cursor]?.type === 'NUMBER' &&
+      tokens[cursor + 1]?.type === 'UNIT' &&
+      UNIT_FAMILY_BY_VALUE.get(tokens[cursor + 1].normalizedValue) === 'volume'
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function inferBareKapDosageForm(tokens, index, packCount) {
+  const token = tokens[index];
+  if (token?.type !== 'WORD' || token.normalizedValue !== 'кап') return null;
+
+  const nextWord = tokens
+    .slice(index + 1, Math.min(tokens.length, index + 4))
+    .find((candidate) => candidate?.type === 'WORD' && candidate.normalizedValue);
+  if (
+    (nextWord && BARE_KAP_DROP_CONTEXT_RE.test(nextWord.normalizedValue)) ||
+    hasVolumeMeasurementAfter(tokens, index)
+  ) {
+    return {
+      dosageForm: 'drops',
+      dosageFormSource: 'explicit',
+      normalizedValue: 'капли',
+      priority: MEDICINE_FORM_PRIORITIES.get('капли') || 0,
+    };
+  }
+
+  if (packCount != null) {
+    return {
+      dosageForm: 'capsule',
+      dosageFormSource: 'explicit',
+      normalizedValue: 'капс',
+      priority: MEDICINE_FORM_PRIORITIES.get('капс') || 0,
+    };
+  }
+
+  return null;
+}
+
 function tokenizeNormalizedQuery(normalizedText) {
   if (!normalizedText) return [];
 
@@ -729,7 +825,9 @@ function collectParenthesizedNoiseTokens(rawQuery) {
     );
     if (!allAnnotationTokens) continue;
     for (const token of innerTokens) {
-      noise.add(token.normalizedValue || token.value);
+      const value = token.normalizedValue || token.value;
+      if (PARENTHESIZED_VARIANT_TOKENS.has(value)) continue;
+      noise.add(value);
     }
   }
   return noise;
@@ -840,6 +938,21 @@ function buildPercentStrengthNode(tokens, startIndex) {
   if (!sequence || tokens[sequence.nextIndex]?.type !== 'PERCENT') return null;
 
   return buildSimpleStrengthNode(sequence.values, '%', startIndex, sequence.nextIndex);
+}
+
+function buildPlusSeparatedSharedUnitStrength(tokens, startIndex) {
+  if (tokens[startIndex]?.type !== 'NUMBER') return null;
+
+  const values = [Number.parseFloat(tokens[startIndex].value)];
+  let cursor = startIndex + 1;
+
+  while (tokens[cursor]?.type === 'PLUS' && tokens[cursor + 1]?.type === 'NUMBER') {
+    values.push(Number.parseFloat(tokens[cursor + 1].value));
+    cursor += 2;
+  }
+
+  if (values.length < 2 || tokens[cursor]?.type !== 'UNIT') return null;
+  return buildSimpleStrengthNode(values, tokens[cursor].normalizedValue, startIndex, cursor);
 }
 
 function buildPlusSeparatedSharedDenominatorRatioStrength(tokens, startIndex) {
@@ -1087,6 +1200,16 @@ function shouldKeepNumberAsBrandToken(tokens, index, consumedIndexes) {
 
   const previous = tokens[index - 1];
   const next = tokens[index + 1];
+  const previousValue = String(previous?.normalizedValue || previous?.value || '').toLowerCase();
+  if (
+    previous?.type === 'WORD' &&
+    /^(р|раз|разм|размер)$/u.test(previousValue) &&
+    Number.isFinite(tokens[index]?.numericValue) &&
+    tokens[index].numericValue > 0 &&
+    tokens[index].numericValue <= 20
+  ) {
+    return true;
+  }
   const hasMeaningfulPrevious = isMeaningfulTradeNameWordToken(
     previous,
     consumedIndexes,
@@ -1100,14 +1223,6 @@ function shouldKeepNumberAsBrandToken(tokens, index, consumedIndexes) {
 
 function isVitaminDTradeNameToken(token) {
   return ['д-3', 'д3', 'd-3', 'd3'].includes(String(token || '').toLowerCase());
-}
-
-function isLevothyroxineTradeName(tradeNameTokens) {
-  const normalizedTradeTokens = (tradeNameTokens || []).map((token) =>
-    String(token || '').toLowerCase(),
-  );
-
-  return normalizedTradeTokens.some((token) => /^l-тироксин$/iu.test(token));
 }
 
 function maybeInferVitaminDStrength({
@@ -1170,6 +1285,68 @@ function maybeInferVitaminDStrength({
   }
 }
 
+// Scan the token stream for the single unconsumed NUMBER in [min, max] eligible
+// to carry an inferred strength/volume. Returns its index, or null when there is
+// no unambiguous candidate (zero or more than one). Shared by the maybeInfer*
+// helpers below, which differ only in range, unit, and eligibility guard.
+function findSoleNumericCandidate(
+  tokens,
+  { consumedIndexes, packCount, min, max, requireInteger = true, allowPackCountMatch = false },
+) {
+  const candidateIndexes = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (consumedIndexes.has(index)) continue;
+    const token = tokens[index];
+    if (token?.type !== 'NUMBER') continue;
+    if (!Number.isFinite(token.numericValue)) continue;
+    if (requireInteger && !Number.isInteger(token.numericValue)) continue;
+    if (token.numericValue < min || token.numericValue > max) continue;
+    if (packCount != null && token.numericValue === packCount && !allowPackCountMatch) continue;
+    candidateIndexes.push(index);
+  }
+  return candidateIndexes.length === 1 ? candidateIndexes[0] : null;
+}
+
+const ENZYME_ACTIVITY_TRADE_TOKENS = new Set([
+  'креон',
+  'креон®',
+  'микразим',
+  'панкреатин',
+  'панзинорм',
+  'эрмиталь',
+]);
+
+function maybeInferEnzymeActivityStrength({
+  tokens,
+  consumedIndexes,
+  tokenRoles,
+  tradeNameTokens,
+  strengthCandidates,
+  packCount,
+}) {
+  if (strengthCandidates.length > 0) return;
+
+  if (!tradeNameTokensInclude(tradeNameTokens, ENZYME_ACTIVITY_TRADE_TOKENS)) return;
+
+  const strengthIndex = findSoleNumericCandidate(tokens, {
+    consumedIndexes,
+    packCount,
+    min: 10000,
+    max: 100000,
+  });
+  if (strengthIndex == null) return;
+
+  const strengthNode = buildSimpleStrengthNode(
+    [tokens[strengthIndex].numericValue],
+    'ед',
+    strengthIndex,
+    strengthIndex,
+  );
+  strengthCandidates.push(strengthNode);
+  consumedIndexes.add(strengthIndex);
+  tokenRoles.set(strengthIndex, 'strength');
+}
+
 // Oral solid forms (tablet, capsule, etc.) where pharmacy listings often
 // abbreviate the strength as a bare number adjacent to the form token. The
 // implicit unit is usually мг — e.g. "АЗИТОКОМ-500 ТАБ №3" → 500 мг,
@@ -1181,6 +1358,33 @@ const ORAL_SOLID_FORMS_WITH_IMPLICIT_MG = new Set([
   'pastille',
   'granule',
 ]);
+const ORAL_SOLID_TRADES_WITH_LOW_IMPLICIT_MG = new Set([
+  'гепирид',
+  'неокласт',
+  'олфрекс',
+  'раксабан',
+]);
+const ORAL_SOLID_TRADES_WITH_SLASH_IMPLICIT_MG = new Set(['ситадиаб']);
+const ORAL_SOLID_TRADES_WITH_IMPLICIT_MG = new Set(['йодомиг', 'сиофор']);
+const POWDER_TRADES_WITH_IMPLICIT_MG = new Set(['ноофен']);
+const ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG = new Set(['йодомарин']);
+// L-тироксин tablets are conventionally listed in micrograms.
+const LEVOTHYROXINE_TABLET_TRADES = new Set(['l-тироксин']);
+const LIQUID_FORMS_WITH_IMPLICIT_ML_VOLUME = new Set(['syrup']);
+
+function tradeNameTokensInclude(tradeNameTokens, tokenSet) {
+  return (tradeNameTokens || []).some((token) =>
+    tokenSet.has(String(token || '').toLowerCase()),
+  );
+}
+
+function dropPromotedTradeNameValues(tradeNameTokens, values) {
+  if (!Array.isArray(tradeNameTokens)) return;
+  const promotedValues = new Set(values.map((value) => String(value)));
+  for (let i = tradeNameTokens.length - 1; i >= 0; i -= 1) {
+    if (promotedValues.has(String(tradeNameTokens[i]))) tradeNameTokens.splice(i, 1);
+  }
+}
 
 function maybeInferOralSolidStrength({
   tokens,
@@ -1191,26 +1395,71 @@ function maybeInferOralSolidStrength({
   packCount,
   strengthCandidates,
 }) {
-  if (!dosageForm || !ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(dosageForm)) return;
+  const hasKnownOralSolidTrade =
+    !dosageForm &&
+    packCount != null &&
+    (tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_MG) ||
+      tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_LOW_IMPLICIT_MG) ||
+      tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG));
+  if (
+    (!dosageForm || !ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(dosageForm)) &&
+    !hasKnownOralSolidTrade
+  ) {
+    return;
+  }
   if (strengthCandidates.length > 0) return;
 
-  const candidateIndexes = [];
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (consumedIndexes.has(index)) continue;
-    const token = tokens[index];
-    if (token?.type !== 'NUMBER') continue;
-    if (!Number.isFinite(token.numericValue)) continue;
-    if (!Number.isInteger(token.numericValue)) continue;
-    if (token.numericValue < 25 || token.numericValue > 5000) continue;
-    if (packCount != null && token.numericValue === packCount) continue;
-    candidateIndexes.push(index);
+  if (tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_SLASH_IMPLICIT_MG)) {
+    const slashSequences = [];
+    for (let index = 0; index < tokens.length; index += 1) {
+      if (consumedIndexes.has(index) || tokens[index]?.type !== 'NUMBER') continue;
+      const sequence = collectNumericSequence(tokens, index);
+      if (!sequence || sequence.values.length < 2) continue;
+      if (sequence.values.some((value) => value < 1 || value > 5000)) continue;
+      slashSequences.push({ index, ...sequence });
+      index = sequence.nextIndex - 1;
+    }
+
+    if (slashSequences.length === 1) {
+      const sequence = slashSequences[0];
+      const strengthNode = buildSimpleStrengthNode(
+        sequence.values,
+        'мг',
+        sequence.index,
+        sequence.nextIndex - 1,
+      );
+      strengthCandidates.push(strengthNode);
+      for (let index = sequence.index; index < sequence.nextIndex; index += 1) {
+        consumedIndexes.add(index);
+        tokenRoles.set(index, 'strength');
+      }
+      dropPromotedTradeNameValues(tradeNameTokens, sequence.values);
+      return;
+    }
   }
 
-  if (candidateIndexes.length !== 1) return;
+  const allowLowStrength = tradeNameTokensInclude(
+    tradeNameTokens,
+    ORAL_SOLID_TRADES_WITH_LOW_IMPLICIT_MG,
+  );
+  const allowStrengthMatchingPackCount = tradeNameTokensInclude(
+    tradeNameTokens,
+    ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG,
+  );
+  const strengthIndex = findSoleNumericCandidate(tokens, {
+    consumedIndexes,
+    packCount,
+    min: allowLowStrength ? 1 : 25,
+    max: 5000,
+    allowPackCountMatch: allowStrengthMatchingPackCount,
+  });
+  if (strengthIndex == null) return;
 
-  const strengthIndex = candidateIndexes[0];
   const inferredUnit =
-    dosageForm === 'tablet' && isLevothyroxineTradeName(tradeNameTokens) ? 'мкг' : 'мг';
+    (dosageForm === 'tablet' && tradeNameTokensInclude(tradeNameTokens, LEVOTHYROXINE_TABLET_TRADES)) ||
+    tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG)
+      ? 'мкг'
+      : 'мг';
   const strengthNode = buildSimpleStrengthNode(
     [tokens[strengthIndex].numericValue],
     inferredUnit,
@@ -1223,12 +1472,113 @@ function maybeInferOralSolidStrength({
 
   // Trade-name tokens were collected from residue earlier — drop the just-
   // promoted strength value so it doesn't appear in both fields.
-  if (Array.isArray(tradeNameTokens)) {
-    const promotedValue = String(tokens[strengthIndex].value);
-    for (let i = tradeNameTokens.length - 1; i >= 0; i -= 1) {
-      if (tradeNameTokens[i] === promotedValue) tradeNameTokens.splice(i, 1);
-    }
+  dropPromotedTradeNameValues(tradeNameTokens, [tokens[strengthIndex].value]);
+}
+
+function maybeInferLiquidPackageVolume({
+  tokens,
+  dosageForm,
+  consumedIndexes,
+  tokenRoles,
+  volumeCandidates,
+}) {
+  if (!LIQUID_FORMS_WITH_IMPLICIT_ML_VOLUME.has(dosageForm)) return;
+  if (volumeCandidates.length > 0) return;
+
+  const volumeIndex = findSoleNumericCandidate(tokens, {
+    consumedIndexes,
+    min: 10,
+    max: 1000,
+  });
+  if (volumeIndex == null) return;
+
+  volumeCandidates.push(
+    buildMeasurementNode(
+      { value: tokens[volumeIndex].value, normalizedValue: null },
+      { normalizedValue: 'мл' },
+      volumeIndex,
+      volumeIndex,
+    ),
+  );
+  consumedIndexes.add(volumeIndex);
+  tokenRoles.set(volumeIndex, 'volume');
+}
+
+function maybeInferPowderGramStrength({
+  tokens,
+  dosageForm,
+  consumedIndexes,
+  tokenRoles,
+  tradeNameTokens,
+  packCount,
+  strengthCandidates,
+}) {
+  if (dosageForm !== 'powder') return;
+  if (strengthCandidates.length > 0) return;
+  if (packCount == null) return;
+
+  const candidateIndexes = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (consumedIndexes.has(index)) continue;
+    const token = tokens[index];
+    if (token?.type !== 'NUMBER') continue;
+    if (!Number.isFinite(token.numericValue)) continue;
+    if (token.numericValue <= 0 || token.numericValue > 10) continue;
+    if (packCount != null && token.numericValue === packCount) continue;
+    candidateIndexes.push(index);
   }
+
+  if (candidateIndexes.length !== 1) return;
+
+  const strengthIndex = candidateIndexes[0];
+  const strengthNode = buildSimpleStrengthNode(
+    [tokens[strengthIndex].numericValue],
+    'г',
+    strengthIndex,
+    strengthIndex,
+  );
+  strengthCandidates.push(strengthNode);
+  consumedIndexes.add(strengthIndex);
+  tokenRoles.set(strengthIndex, 'strength');
+  dropPromotedTradeNameValues(tradeNameTokens, [tokens[strengthIndex].value]);
+}
+
+function maybeInferPowderMilligramStrength({
+  tokens,
+  dosageForm,
+  dosageFormRoute,
+  consumedIndexes,
+  tokenRoles,
+  tradeNameTokens,
+  packCount,
+  strengthCandidates,
+}) {
+  if (dosageForm !== 'powder') return;
+  if (strengthCandidates.length > 0) return;
+  if (packCount == null) return;
+  const isInjectionPowder = dosageFormRoute === 'injection' || dosageFormRoute === 'infusion';
+  if (!isInjectionPowder && !tradeNameTokensInclude(tradeNameTokens, POWDER_TRADES_WITH_IMPLICIT_MG)) {
+    return;
+  }
+
+  const strengthIndex = findSoleNumericCandidate(tokens, {
+    consumedIndexes,
+    packCount,
+    min: 25,
+    max: 5000,
+  });
+  if (strengthIndex == null) return;
+
+  const strengthNode = buildSimpleStrengthNode(
+    [tokens[strengthIndex].numericValue],
+    'мг',
+    strengthIndex,
+    strengthIndex,
+  );
+  strengthCandidates.push(strengthNode);
+  consumedIndexes.add(strengthIndex);
+  tokenRoles.set(strengthIndex, 'strength');
+  dropPromotedTradeNameValues(tradeNameTokens, [tokens[strengthIndex].value]);
 }
 
 function hasRepeatedStrengthNumberLater(tokens, index) {
@@ -1438,19 +1788,29 @@ function formatNormalizedNumber(value) {
 
 function buildSameUnitSlashStrength(normalizedText) {
   const match = String(normalizedText || '').match(
-    /(?:^|[^\p{L}\p{N}])(\d+(?:\.\d+)?)\s*(мг|мкг|г|ме|ед)\s*\/\s*(\d+(?:\.\d+)?)\s*\2(?=$|[^\p{L}\p{N}])/iu,
+    /(?:^|[^\p{L}\p{N}])((?:\d+(?:\.\d+)?\s*(мг|мкг|г|ме|ед)\s*\/\s*)+\d+(?:\.\d+)?\s*\2)(?=$|[^\p{L}\p{N}])/iu,
   );
   if (!match) return null;
 
-  const leftValue = Number.parseFloat(match[1]);
-  const rightValue = Number.parseFloat(match[3]);
   const unit = match[2].toLowerCase();
-  if (!Number.isFinite(leftValue) || !Number.isFinite(rightValue)) return null;
+  const values = Array.from(
+    match[1].matchAll(/(\d+(?:\.\d+)?)\s*(мг|мкг|г|ме|ед)/giu),
+    (component) => ({
+      value: Number.parseFloat(component[1]),
+      unit: component[2].toLowerCase(),
+    }),
+  );
+  if (
+    values.length < 2 ||
+    values.some((component) => !Number.isFinite(component.value) || component.unit !== unit)
+  ) {
+    return null;
+  }
 
   return {
     kind: 'simple',
-    text: `${formatNormalizedNumber(leftValue)} ${unit}/${formatNormalizedNumber(rightValue)} ${unit}`,
-    values: [leftValue, rightValue],
+    text: values.map((component) => `${formatNormalizedNumber(component.value)} ${unit}`).join('/'),
+    values: values.map((component) => component.value),
     value: null,
     unit,
   };
@@ -1481,6 +1841,7 @@ function mergeSameUnitSlashStrength(strengths, normalizedText) {
   // a single multi-value simple, so merge unconditionally.
   const slashValues = slashStrength.values;
   const allValuesEqual = slashValues.every((value) => value === slashValues[0]);
+  const hasDuplicateValues = new Set(slashValues.map((value) => `${value}`)).size < slashValues.length;
   const separateSimples = strengths.filter(
     (strength) =>
       strength?.kind === 'simple' &&
@@ -1489,7 +1850,7 @@ function mergeSameUnitSlashStrength(strengths, normalizedText) {
       slashValues.includes(strength.value),
   );
   const hasDistinctSeparates = separateSimples.length >= 2;
-  if (slashStrength.unit === 'мг' && hasDistinctSeparates && !allValuesEqual) {
+  if (slashStrength.unit === 'мг' && hasDistinctSeparates && !allValuesEqual && !hasDuplicateValues) {
     return strengths;
   }
 
@@ -1608,6 +1969,23 @@ function recoverHyphenatedEnemaTradeName(tokens) {
 function parseMedicineQuery(rawQuery) {
   const normalizedText = normalizeMedicineQuery(rawQuery);
   const tokens = tokenizeNormalizedQuery(normalizedText);
+  for (let index = 1; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const previous = tokens[index - 1];
+    if (
+      token?.type === 'UNIT' &&
+      token.normalizedValue === 'л' &&
+      SIZE_CONTEXT_TOKENS.has(previous?.normalizedValue || previous?.value)
+    ) {
+      tokens[index] = {
+        value: 'l',
+        normalizedValue: 'l',
+        start: token.start,
+        end: token.end,
+        type: 'WORD',
+      };
+    }
+  }
   const consumedIndexes = new Set();
   const tokenRoles = new Map();
   const consumeRange = (startIndex, endIndex, role) => {
@@ -1624,13 +2002,33 @@ function parseMedicineQuery(rawQuery) {
   let containerType = null;
   let packCount = null;
 
-  // Extract pack count from №N patterns directly from raw query (last one wins)
-  for (const match of (rawQuery || '').matchAll(/№\s*(\d+)/gu)) {
+  // Extract pack count from №N / №NxM patterns directly from raw query (last one wins).
+  let hasRawPackMultiplier = false;
+  for (const match of (rawQuery || '').matchAll(/№\s*(\d+)\s*[хx×]\s*(\d+)/giu)) {
+    const left = Number.parseInt(match[1], 10);
+    const right = Number.parseInt(match[2], 10);
+    if (Number.isFinite(left) && Number.isFinite(right) && left > 0 && right > 0) {
+      packCount = left * right;
+      hasRawPackMultiplier = true;
+    }
+  }
+  for (const match of (rawQuery || '').matchAll(/№\s*(\d+)(?!\d)(?!\s*[хx×]\s*\d)/giu)) {
     packCount = Number.parseInt(match[1], 10);
   }
 
   for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
+    let token = tokens[index];
+
+    const inferredBareKapDosageForm = inferBareKapDosageForm(tokens, index, packCount);
+    if (inferredBareKapDosageForm) {
+      token = {
+        ...token,
+        type: 'DOSAGE_FORM',
+        ...inferredBareKapDosageForm,
+        containerType: null,
+      };
+      tokens[index] = token;
+    }
 
     if (token.type === 'COUNT_MARKER') {
       const nextToken = tokens[index + 1];
@@ -1676,6 +2074,12 @@ function parseMedicineQuery(rawQuery) {
       if (packCount == null && Number.isFinite(token.count) && token.count > 0) {
         packCount = token.count;
       }
+      consumedIndexes.add(index);
+      tokenRoles.set(index, 'pack');
+      continue;
+    }
+
+    if (hasRawPackMultiplier && token.type === 'WORD' && /^x\d+$/u.test(token.value)) {
       consumedIndexes.add(index);
       tokenRoles.set(index, 'pack');
       continue;
@@ -1795,6 +2199,18 @@ function parseMedicineQuery(rawQuery) {
       continue;
     }
 
+    const plusSeparatedSharedUnit = buildPlusSeparatedSharedUnitStrength(tokens, index);
+    if (plusSeparatedSharedUnit) {
+      strengthCandidates.push(plusSeparatedSharedUnit);
+      consumeRange(
+        plusSeparatedSharedUnit.startIndex,
+        plusSeparatedSharedUnit.endIndex,
+        'strength',
+      );
+      index = plusSeparatedSharedUnit.endIndex;
+      continue;
+    }
+
     const multiComponentRatio = buildMultiComponentRatioStrength(tokens, index);
     if (multiComponentRatio) {
       strengthCandidates.push(multiComponentRatio);
@@ -1857,6 +2273,7 @@ function parseMedicineQuery(rawQuery) {
   const hasPreciserStrength = strengthCandidates.some(
     (s) =>
       (s.kind === 'ratio' && UNIT_FAMILY_BY_VALUE.get(s.denominator?.unit) === 'volume') ||
+      (s.kind === 'ratio' && UNIT_FAMILY_BY_VALUE.get(s.denominator?.unit) === 'mass') ||
       (s.kind === 'ratio' && UNIT_FAMILY_BY_VALUE.get(s.denominator?.unit) === 'dose') ||
       (s.kind === 'simple' && PRECISE_STRENGTH_UNITS.has(s.unit)) ||
       (s.kind === 'combination' && s.components?.some((c) => PRECISE_STRENGTH_UNITS.has(c.unit))),
@@ -2020,14 +2437,29 @@ function parseMedicineQuery(rawQuery) {
     remainingTokens: tradeNameResidueTokens,
   } = extractVendorCountryFromTokens(uniqueResidueTokens);
   const parenNoiseTokens = collectParenthesizedNoiseTokens(rawQuery);
-  const filteredResidueTokens = parenNoiseTokens.size
-    ? tradeNameResidueTokens.filter((token) => !parenNoiseTokens.has(token))
-    : tradeNameResidueTokens;
+  // A paren-noise token that appears more than once in the residue is likely
+  // meaningful (not just annotation), so only single-occurrence tokens are
+  // removable. Skip the work entirely when there's no paren noise.
+  const removableParenNoiseTokens = new Set();
   if (parenNoiseTokens.size) {
+    const seenResidueTokens = new Set();
+    const duplicateResidueTokens = new Set();
+    for (const token of residueTokens) {
+      if (seenResidueTokens.has(token)) duplicateResidueTokens.add(token);
+      else seenResidueTokens.add(token);
+    }
+    for (const token of parenNoiseTokens) {
+      if (!duplicateResidueTokens.has(token)) removableParenNoiseTokens.add(token);
+    }
+  }
+  const filteredResidueTokens = removableParenNoiseTokens.size
+    ? tradeNameResidueTokens.filter((token) => !removableParenNoiseTokens.has(token))
+    : tradeNameResidueTokens;
+  if (removableParenNoiseTokens.size) {
     for (const [tokenIndex, role] of tokenRoles) {
       if (role !== 'trade_name') continue;
       const value = tokens[tokenIndex]?.normalizedValue;
-      if (value && parenNoiseTokens.has(value)) tokenRoles.delete(tokenIndex);
+      if (value && removableParenNoiseTokens.has(value)) tokenRoles.delete(tokenIndex);
     }
   }
   const cyrillicTokenSet = new Set(filteredResidueTokens.filter((t) => /[\u0400-\u04ff]/u.test(t)));
@@ -2048,6 +2480,15 @@ function parseMedicineQuery(rawQuery) {
     strengthCandidates,
   });
 
+  maybeInferEnzymeActivityStrength({
+    tokens,
+    consumedIndexes,
+    tokenRoles,
+    tradeNameTokens,
+    packCount,
+    strengthCandidates,
+  });
+
   maybeInferOralSolidStrength({
     tokens,
     dosageForm,
@@ -2058,6 +2499,37 @@ function parseMedicineQuery(rawQuery) {
     strengthCandidates,
   });
 
+  const dosageFormRoute = detectDosageFormRoute(rawQuery);
+
+  maybeInferPowderMilligramStrength({
+    tokens,
+    dosageForm,
+    dosageFormRoute,
+    consumedIndexes,
+    tokenRoles,
+    tradeNameTokens,
+    packCount,
+    strengthCandidates,
+  });
+
+  maybeInferPowderGramStrength({
+    tokens,
+    dosageForm,
+    consumedIndexes,
+    tokenRoles,
+    tradeNameTokens,
+    packCount,
+    strengthCandidates,
+  });
+
+  maybeInferLiquidPackageVolume({
+    tokens,
+    dosageForm,
+    consumedIndexes,
+    tokenRoles,
+    volumeCandidates,
+  });
+
   if (
     packCount == null &&
     strengthCandidates.length === 0 &&
@@ -2066,8 +2538,6 @@ function parseMedicineQuery(rawQuery) {
   ) {
     packCount = 1;
   }
-
-  const dosageFormRoute = detectDosageFormRoute(rawQuery);
 
   // For infusion bags, injection ampoules, or injectable-looking vials written as a bare ratio
   // (e.g. "500 мг/100 мл" with no separate "100 мл"), the ratio's
