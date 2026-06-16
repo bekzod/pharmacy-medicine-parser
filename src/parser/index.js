@@ -708,6 +708,29 @@ function classifyWordToken(token) {
   };
 }
 
+function hasNumericMeasurementContext(tokens, index) {
+  return tokens[index - 1]?.type === 'NUMBER' || tokens[index + 1]?.type === 'NUMBER';
+}
+
+function restoreStandaloneLengthUnitTokens(tokens) {
+  return tokens.map((token, index) => {
+    if (
+      token?.type !== 'UNIT' ||
+      token.normalizedValue !== 'м' ||
+      hasNumericMeasurementContext(tokens, index)
+    ) {
+      return token;
+    }
+
+    const { unitFamily, ...rest } = token;
+    return {
+      ...rest,
+      type: 'WORD',
+      normalizedValue: 'м',
+    };
+  });
+}
+
 const BARE_KAP_DROP_CONTEXT_RE = /^(глаз|наз|нос|уш|офтальм)/u;
 
 function hasVolumeMeasurementAfter(tokens, index, lookahead = 6) {
@@ -758,7 +781,7 @@ function inferBareKapDosageForm(tokens, index, packCount) {
 function tokenizeNormalizedQuery(normalizedText) {
   if (!normalizedText) return [];
 
-  return [...normalizedText.matchAll(TOKEN_RE)].map((match) => {
+  const tokens = [...normalizedText.matchAll(TOKEN_RE)].map((match) => {
     const value = match[0];
     const start = match.index || 0;
     const end = start + value.length;
@@ -793,6 +816,8 @@ function tokenizeNormalizedQuery(normalizedText) {
       ...classifyWordToken(value),
     };
   });
+
+  return restoreStandaloneLengthUnitTokens(tokens);
 }
 
 function tokenizeMedicineQuery(rawQuery) {
@@ -1199,11 +1224,12 @@ function isMeaningfulTradeNameWordToken(token, consumedIndexes = null, index = n
 
   const normalizedToken = token.normalizedValue || '';
   if (!normalizedToken) return false;
+  const restoredStandaloneMeterSuffix = normalizedToken === 'м';
 
   return (
     !MEDICINE_DESCRIPTOR_TOKENS.has(normalizedToken) &&
     !MEDICINE_FORM_TOKENS.has(normalizedToken) &&
-    !MEDICINE_UNIT_TOKENS.has(normalizedToken) &&
+    (!MEDICINE_UNIT_TOKENS.has(normalizedToken) || restoredStandaloneMeterSuffix) &&
     !PARSER_NOISE_TOKENS.has(normalizedToken)
   );
 }

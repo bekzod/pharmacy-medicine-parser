@@ -842,6 +842,37 @@ test('keeps parenthesized short variant tokens', () => {
   assert.equal(alphabet.attributes.pack_count, 60);
 });
 
+test('keeps standalone M brand suffix before dosage form', () => {
+  const parsed = parseMedicineQuery('Аллервэй М таб. 5мг+10мг №30');
+
+  assert.equal(parsed.attributes.trade_name_text, 'аллервэй м');
+  assert.deepEqual(parsed.attributes.trade_name_tokens, ['аллервэй', 'м']);
+  assert.equal(parsed.attributes.dosage_form, 'tablet');
+  assert.deepEqual(parsed.attributes.strengths, [
+    {
+      kind: 'combination',
+      text: '5 мг + 10 мг',
+      components: [
+        { value: 5, unit: 'мг' },
+        { value: 10, unit: 'мг' },
+      ],
+    },
+  ]);
+  assert.equal(parsed.attributes.pack_count, 30);
+
+  const searchQuery = buildMedicineSearchQuery(parsed, {
+    limit: 1,
+    requireParsedAttributeMatch: true,
+    strictParsedAttributeFilters: true,
+  });
+  assert.equal(searchQuery.replacements.tradeNameQuery, 'аллервэй м');
+  assert.ok(Object.values(searchQuery.replacements).includes('10/5 мг'));
+  assert.ok(Object.values(searchQuery.replacements).includes('10 мг/5 мг'));
+  assert.ok(
+    searchQuery.sql.includes("replace(lower((m.name)::text), 'ё', 'е') LIKE :tradeNamePrefix"),
+  );
+});
+
 test('detects explicit oral route for suspension listings', () => {
   const parsed = parseMedicineQuery('Алмидоз суспензия для приема внутрь 10 мл №10');
 
