@@ -663,6 +663,89 @@ test('parses plus-separated strengths with a shared trailing unit', () => {
   ]);
 });
 
+test('drops duplicate total strength marker before injectable powder form', () => {
+  const parsed = parseMedicineQuery('абилот 1,5 пор для приг.р-ра для инъек. 1,0/0,5г №1');
+
+  assert.equal(parsed.attributes.trade_name_text, 'абилот');
+  assert.equal(parsed.attributes.dosage_form, 'powder');
+  assert.equal(parsed.attributes.dosage_form_route, 'injection');
+  assert.deepEqual(parsed.attributes.strengths, [
+    { kind: 'simple', text: '1 г/0.5 г', values: [1, 0.5], value: null, unit: 'г' },
+  ]);
+  assert.equal(parsed.attributes.pack_count, 1);
+});
+
+test('drops duplicate total strength marker for same-unit combination strengths', () => {
+  const parsed = parseMedicineQuery('комбипреп 30 таб. 10 мг + 20 мг №10');
+
+  assert.equal(parsed.attributes.trade_name_text, 'комбипреп');
+  assert.equal(parsed.tokens.find((token) => token.value === '30')?.role, 'strength');
+  assert.deepEqual(parsed.attributes.strengths, [
+    {
+      kind: 'combination',
+      text: '10 мг + 20 мг',
+      components: [
+        { value: 10, unit: 'мг' },
+        { value: 20, unit: 'мг' },
+      ],
+    },
+  ]);
+
+  const searchQuery = buildMedicineSearchQuery(parsed, {
+    limit: 5,
+    requireParsedAttributeMatch: true,
+    strictParsedAttributeFilters: true,
+  });
+  const replacementValues = Object.values(searchQuery.replacements);
+  assert.ok(replacementValues.includes('10/20 мг'));
+  assert.ok(replacementValues.includes('30 мг'));
+  assert.ok(replacementValues.includes('0.03 г'));
+  assert.ok(replacementValues.includes('0,03 г'));
+});
+
+test('drops trailing generic annotation after ampoule pack count', () => {
+  const parsed = parseMedicineQuery('авикарнитин амп.200мг/5мл№5 левокарнитин');
+
+  assert.equal(parsed.attributes.trade_name_text, 'авикарнитин');
+  assert.equal(parsed.attributes.dosage_form, 'injection');
+  assert.equal(parsed.attributes.container_type, 'ampoule');
+  assert.deepEqual(parsed.attributes.strengths, [
+    {
+      kind: 'ratio',
+      text: '200 мг/5 мл',
+      values: [200],
+      value: 200,
+      unit: 'мг',
+      denominator: { value: 5, unit: 'мл' },
+    },
+  ]);
+  assert.deepEqual(parsed.attributes.volumes, [{ text: '5 мл', value: 5, unit: 'мл' }]);
+  assert.equal(parsed.attributes.pack_count, 5);
+});
+
+test('keeps post-pack flavor variants but drops plain trailing annotations', () => {
+  const flavor = parseMedicineQuery('аджисепт паст №24 лимон');
+  assert.deepEqual(flavor.attributes.trade_name_tokens, ['аджисепт', 'лимон']);
+  assert.equal(flavor.attributes.dosage_form, 'paste');
+  assert.equal(flavor.attributes.pack_count, 24);
+
+  const generic = parseMedicineQuery('аджисепт паст №24 фарм 2');
+  assert.deepEqual(generic.attributes.trade_name_tokens, ['аджисепт']);
+  assert.equal(generic.attributes.dosage_form, 'paste');
+  assert.equal(generic.attributes.pack_count, 24);
+});
+
+test('keeps parenthesized trade-name text when the span contains a dosage signal', () => {
+  const parsed = parseMedicineQuery('бренд (актив 5 мг) таб №10');
+
+  assert.equal(parsed.attributes.trade_name_text, 'бренд актив');
+  assert.equal(parsed.attributes.dosage_form, 'tablet');
+  assert.deepEqual(parsed.attributes.strengths, [
+    { kind: 'simple', text: '5 мг', values: [5], value: 5, unit: 'мг' },
+  ]);
+  assert.equal(parsed.attributes.pack_count, 10);
+});
+
 test('keeps parenthesized classic flavor variants', () => {
   const parsed = parseMedicineQuery('АДЖИСЕПТ ПАСТ №24 (КЛАССИЧЕСКИЙ)');
 
