@@ -199,7 +199,7 @@ const MEDICINE_DOSAGE_FORMS = [
     profile: {
       token: 'гель',
       priority: 3,
-      tokenPatterns: [/^(гел[а-яё]{0,3}|gel)$/u],
+      tokenPatterns: [/^(гель|гел\.?|геля|гелю|гелем|геле|gel)$/u],
     },
   },
   {
@@ -275,7 +275,14 @@ const MEDICINE_DOSAGE_FORMS = [
   },
   { form: 'pessary', parsePatterns: [/пессари/iu, /ваг\.?\s*супп/iu, /вагинальн/iu] },
   { form: 'enema', parsePatterns: [/клизм/iu, /микроклизм/iu, /энема/iu] },
-  { form: 'patch', parsePatterns: [/пластыр/iu, wholeToken('пласт\\.?'), /трансдерм/iu] },
+  {
+    form: 'patch',
+    parsePatterns: [
+      /пластыр/iu,
+      /(^|[^\p{L}\p{N}])пласт(?!\.?\s*бут)\.?(?=$|[^\p{L}\p{N}])/iu,
+      /трансдерм/iu,
+    ],
+  },
   { form: 'paste', parsePatterns: [wholeToken('паст\\.?'), wholeToken('паста')] },
   {
     form: 'pastille',

@@ -17,7 +17,7 @@ const {
 const { LATIN_TO_CYRILLIC, LATIN_HOMOGLYPH_RE } = require('../latin-to-cyrillic');
 const { TRADE_NAME_ABBREV_TOKEN_ALIASES } = require('../medicine-lookup-common');
 const TOKEN_RE =
-  /\d+(?:\.\d+)?(?:x\d+|[a-zа-яё]+)?(?:-[a-zа-яё][a-zа-яё0-9]*)*|[a-zа-яё][a-zа-яё0-9]*(?:-[a-zа-яё0-9]+)*|%|\/|\+/giu;
+  /\d+(?:\.\d+)?(?:x\d+(?:\.\d+)?|[a-zа-яё]+)?(?:-[a-zа-яё][a-zа-яё0-9]*)*|[a-zа-яё][a-zа-яё0-9]*(?:-[a-zа-яё0-9]+)*|%|\/|\+/giu;
 
 // Russian descriptor / indication words that commonly trail pharmacy listings
 // and shouldn't pollute the trade-name signal. Keep tight to avoid dropping
@@ -219,6 +219,7 @@ const PARSER_NOISE_TOKENS = new Set([
 const FLAVOR_VARIANT_TOKENS = [
   'апельсин',
   'апельсиновый',
+  'апелсина',
   'ананас',
   'вишня',
   'классический',
@@ -229,12 +230,21 @@ const FLAVOR_VARIANT_TOKENS = [
   'малина',
   'мед',
   'мёд',
+  'ментол',
   'мята',
   'норм',
+  'смородина',
+  'черн',
+  'черная',
+  'ягодные',
+  'ягодный',
   'эвкалипт',
 ];
 const PARENTHESIZED_VARIANT_TOKENS = new Set([
+  'active',
+  'актив',
   'классик',
+  'swanson',
   'universal',
   'горького',
   'левый',
@@ -301,7 +311,8 @@ const CONTAINER_NORMALIZERS = [
     containerType: 'bottle',
   },
   {
-    pattern: /^(пакетик[а-я]*|пакет(?:ы|ов|а|е|ам|ами|ах)?|пакет\.?|паке\.|саше|стик[а-я]*)$/u,
+    pattern:
+      /^(пакетик[а-я]*|пакет(?:ы|ов|а|е|ам|ами|ах)?|пакет\.?|паке\.|саше|стик[а-я]*|ф-п)$/u,
     containerType: 'sachet',
   },
 ];
@@ -315,7 +326,11 @@ const CONTAINER_NORMALIZERS = [
 // "р-р" / "р/р" both appear in pharmacy listings; treat them as equivalent.
 const RP = String.raw`р\s*[-/]\s*р`;
 const DOSAGE_FORM_ROUTE_PATTERNS = [
+  { route: 'rectal', pattern: /(?<![а-я])рект[а-я]*\.?/iu },
+  { route: 'vaginal', pattern: /(?<![а-я])ваг(?:ин[а-я]*)?\.?/iu },
   { route: 'oral', pattern: /для\s+приема\s+внутрь/iu },
+  { route: 'oral', pattern: /(?:д\s*\/\s*)?при[её](?:м)?[а-я.]*[\s.]+внутрь/iu },
+  { route: 'oral', pattern: /д\s*\/\s*вн(?:утрь)?\.?/iu },
   { route: 'infusion', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*инф[а-я]*\\.?`, 'iu') },
   { route: 'infusion', pattern: new RegExp(`${RP}\\.?\\s*для\\s*\\/?\\s*инф[а-я]*\\.?`, 'iu') },
   { route: 'infusion', pattern: new RegExp(`${RP}\\.?\\s*инф[а-я]*\\.?`, 'iu') },
@@ -386,6 +401,8 @@ const PRODUCT_TYPE_PATTERNS = {
     stem('гиг\\.?\\s*сред[а-яё]*'),
     stem('бутыл[а-яё]+\\s+с\\s+соск'),
     stem('соск[а-яё]+'),
+    stem('щетк[а-яё]*'),
+    /детс\.?\s*печ(?:$|[^\p{L}])/iu,
     /\bpetri\s*dish/iu,
     stem('чашк[аеёиою]\\s+петри'),
     /\bmommy'?s?\b/iu,
@@ -490,6 +507,9 @@ function normalizeRawSegment(segment) {
   const packMatch = value.match(/^n(\d+)$/u);
   if (packMatch) return `n ${packMatch[1]}`;
 
+  const gluedPieceCountMatch = value.match(/^(\d+)\s*шт(?:ук)?$/u);
+  if (gluedPieceCountMatch) return `n ${gluedPieceCountMatch[1]}`;
+
   const attachedUnitWithSuffixMatch = value.match(
     /^(\d+(?:\.\d+)?)([a-zа-яё]+)-[a-zа-яё0-9]{1,6}$/u,
   );
@@ -578,11 +598,16 @@ function normalizeMedicineQuery(rawQuery) {
       ' ',
     )
     .replace(/(\d),(\d)/gu, '$1.$2')
+    .replace(/(\d+(?:\.\d+)?)(мкг|мг|мл|кг|г|л|ме|ед|%)\s*\/\s*№(?=\s*\d)/giu, '$1 $2 №')
+    .replace(/(\d+(?:\.\d+)?)(мкг|мг)\s*\/\s*(?:д|доз)(?![\p{L}\d])/giu, '$1 $2/доз')
+    .replace(/(\d+(?:\.\d+)?)(мкг|мг)\s*\/\s*(\d+)(?![\p{L}\d])/giu, '$1 $2/$3 доз')
+    .replace(/д\s*\/\s*п(?!риг)(?:-?го)?/giu, ' ')
     .replace(/(р\s*[-/]\s*р)(?=\d)/giu, '$1 ')
     .replace(/(\d)(мкг|мг|мл|кг|г|л|ме|ед)\s*\/\s+(?=\d)/giu, '$1$2/')
     .replace(/%[./]?(?=\d)/gu, '% ')
     .replace(/(мкг|мг|мл|кг|г|л|%)-(?=\d)/giu, '$1 ')
     .replace(/(\d)\s*[х×x]\s*(\d)/gu, '$1x$2')
+    .replace(/(?<![\p{L}\d])(\d{1,2})\s*g(?![\p{L}\d])/giu, '$1 g')
     .replace(
       /(\d+(?:\.\d+)?)(мм|см|м)\s*[*хx×]\s*(\d+(?:\.\d+)?)(мм|см|м)?/giu,
       (match, left, leftUnit, right, rightUnit) =>
@@ -590,7 +615,7 @@ function normalizeMedicineQuery(rawQuery) {
     )
     .replace(/\bsoft\s*gels?\b/giu, 'softgel')
     .replace(/\bveg\s*caps(?:ule)?s?\b/giu, 'vegcaps')
-    .replace(/\b(\d{1,2}(?:\s+\d{3})+|[1-9]\d{2}(?:\s+0{3})+)\b/gu, (value) =>
+    .replace(/(?<![\p{L}\d])(\d{1,2}(?:\s+\d{3})+|[1-9]\d{2}(?:\s+0{3})+)(?![\p{L}\d])/gu, (value) =>
       value.replace(/\s+/gu, ''),
     )
     .replace(/№\s*(\d+)/gu, '')
@@ -610,6 +635,7 @@ function normalizeMedicineQuery(rawQuery) {
     // letters before the hyphen and \u22652 digits after to preserve ingredient/
     // vitamin patterns like "\u0414-3", "\u0412-12", "\u03c9-3", "\u043e\u043c\u0435\u0433\u0430-3".
     .replace(/([\p{L}]{4,})-(\d{2,})(?![\p{L}\d])/gu, '$1 $2')
+    .replace(/(?<![\p{L}\d])[hн](\d+(?:\.\d+)?)(?=\s*(?:мг|мкг|г|%)(?![\p{L}\d]))/giu, '$1')
     // Expand pharmacy "<digits>\u0414" abbreviation to "<digits> \u0434\u043e\u0437" (e.g.
     // "200\u0414" \u2192 "200 \u0434\u043e\u0437" for inhalers/aerosols). Negative lookahead avoids
     // breaking "\u04143", "\u0414-3", "200\u0434\u0437" \u2014 only fires when "\u0434" is the trailing
@@ -731,6 +757,32 @@ function restoreStandaloneLengthUnitTokens(tokens) {
   });
 }
 
+function restorePlasticBottleAnnotationTokens(tokens) {
+  return tokens.map((token, index) => {
+    if (
+      token?.type !== 'DOSAGE_FORM' ||
+      token.dosageForm !== 'patch' ||
+      token.normalizedValue !== 'пласт' ||
+      tokens[index + 1]?.normalizedValue !== 'бут'
+    ) {
+      return token;
+    }
+
+    const {
+      dosageForm,
+      dosageFormSource,
+      containerType,
+      priority,
+      ...rest
+    } = token;
+    return {
+      ...rest,
+      type: 'WORD',
+      normalizedValue: 'пласт',
+    };
+  });
+}
+
 const BARE_KAP_DROP_CONTEXT_RE = /^(глаз|наз|нос|уш|офтальм)/u;
 
 function hasVolumeMeasurementAfter(tokens, index, lookahead = 6) {
@@ -817,7 +869,7 @@ function tokenizeNormalizedQuery(normalizedText) {
     };
   });
 
-  return restoreStandaloneLengthUnitTokens(tokens);
+  return restorePlasticBottleAnnotationTokens(restoreStandaloneLengthUnitTokens(tokens));
 }
 
 function tokenizeMedicineQuery(rawQuery) {
@@ -1279,6 +1331,7 @@ function isDuplicateTotalStrengthMarker(tokens, index, strengthCandidates) {
 
   for (const strength of strengthCandidates) {
     const values = strengthComponentValues(strength).filter((value) => Number.isFinite(value));
+    if (values.length === 1 && Math.abs(token.numericValue - values[0]) < 1e-9) return true;
     if (values.length < 2) continue;
     const total = values.reduce((sum, value) => sum + value, 0);
     if (Math.abs(token.numericValue - total) < 1e-9) return true;
@@ -1376,6 +1429,7 @@ function findSoleNumericCandidate(
 const ENZYME_ACTIVITY_TRADE_TOKENS = new Set([
   'креон',
   'креон®',
+  'мезим',
   'микразим',
   'панкреатин',
   'панзинорм',
@@ -1425,13 +1479,22 @@ const ORAL_SOLID_FORMS_WITH_IMPLICIT_MG = new Set([
   'granule',
 ]);
 const ORAL_SOLID_TRADES_WITH_LOW_IMPLICIT_MG = new Set([
+  'афил',
+  'беласкор',
+  'бризези',
   'гепирид',
   'неокласт',
   'олфрекс',
   'раксабан',
 ]);
-const ORAL_SOLID_TRADES_WITH_SLASH_IMPLICIT_MG = new Set(['ситадиаб']);
+const ORAL_SOLID_TRADES_WITH_SLASH_IMPLICIT_MG = new Set([
+  'амлодил-аб',
+  'анальдим',
+  'аттенто',
+  'ситадиаб',
+]);
 const ORAL_SOLID_TRADES_WITH_IMPLICIT_MG = new Set(['йодомиг', 'сиофор']);
+const ORAL_SOLID_TRADES_WITH_IMPLICIT_G = new Set(['ампициллин']);
 const POWDER_TRADES_WITH_IMPLICIT_MG = new Set(['ноофен']);
 const ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG = new Set(['йодомарин']);
 // L-тироксин tablets are conventionally listed in micrograms.
@@ -1464,7 +1527,9 @@ function maybeInferOralSolidStrength({
   const hasKnownOralSolidTrade =
     !dosageForm &&
     packCount != null &&
-    (tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_MG) ||
+    (tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_SLASH_IMPLICIT_MG) ||
+      tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_MG) ||
+      tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_G) ||
       tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_LOW_IMPLICIT_MG) ||
       tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG));
   if (
@@ -1508,6 +1573,10 @@ function maybeInferOralSolidStrength({
     tradeNameTokens,
     ORAL_SOLID_TRADES_WITH_LOW_IMPLICIT_MG,
   );
+  const allowGramStrength = tradeNameTokensInclude(
+    tradeNameTokens,
+    ORAL_SOLID_TRADES_WITH_IMPLICIT_G,
+  );
   const allowStrengthMatchingPackCount = tradeNameTokensInclude(
     tradeNameTokens,
     ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG,
@@ -1515,8 +1584,9 @@ function maybeInferOralSolidStrength({
   const strengthIndex = findSoleNumericCandidate(tokens, {
     consumedIndexes,
     packCount,
-    min: allowLowStrength ? 1 : 25,
+    min: allowGramStrength ? 0.01 : allowLowStrength ? 1 : 25,
     max: 5000,
+    requireInteger: !(allowGramStrength || allowLowStrength),
     allowPackCountMatch: allowStrengthMatchingPackCount,
   });
   if (strengthIndex == null) return;
@@ -1525,6 +1595,8 @@ function maybeInferOralSolidStrength({
     (dosageForm === 'tablet' && tradeNameTokensInclude(tradeNameTokens, LEVOTHYROXINE_TABLET_TRADES)) ||
     tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG)
       ? 'мкг'
+      : tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_G)
+        ? 'г'
       : 'мг';
   const strengthNode = buildSimpleStrengthNode(
     [tokens[strengthIndex].numericValue],
@@ -1539,6 +1611,46 @@ function maybeInferOralSolidStrength({
   // Trade-name tokens were collected from residue earlier — drop the just-
   // promoted strength value so it doesn't appear in both fields.
   dropPromotedTradeNameValues(tradeNameTokens, [tokens[strengthIndex].value]);
+}
+
+function maybeInferTrailingOralSolidPackCount({
+  tokens,
+  dosageForm,
+  consumedIndexes,
+  tokenRoles,
+  tradeNameTokens,
+  strengthCandidates,
+  packCount,
+}) {
+  if (packCount != null) return null;
+  if (!ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(dosageForm)) return null;
+  if (!strengthCandidates.length) return null;
+
+  const candidateIndexes = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (consumedIndexes.has(index)) continue;
+    const token = tokens[index];
+    if (token?.type !== 'NUMBER') continue;
+    if (!Number.isFinite(token.numericValue) || !Number.isInteger(token.numericValue)) continue;
+    if (token.numericValue < 2 || token.numericValue > 200) continue;
+    candidateIndexes.push(index);
+  }
+  if (candidateIndexes.length !== 1) return null;
+
+  const packIndex = candidateIndexes[0];
+  let hasStrengthBefore = false;
+  for (let index = 0; index < packIndex; index += 1) {
+    if (tokenRoles.get(index) === 'strength') {
+      hasStrengthBefore = true;
+      break;
+    }
+  }
+  if (!hasStrengthBefore) return null;
+
+  consumedIndexes.add(packIndex);
+  tokenRoles.set(packIndex, 'pack');
+  dropPromotedTradeNameValues(tradeNameTokens, [tokens[packIndex].value]);
+  return tokens[packIndex].numericValue;
 }
 
 function maybeInferLiquidPackageVolume({
@@ -2137,6 +2249,17 @@ function parseMedicineQuery(rawQuery) {
         index += 1;
         continue;
       }
+      if (
+        dosageForm &&
+        ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(dosageForm) &&
+        Number.isFinite(token.right) &&
+        token.right >= 100
+      ) {
+        strengthCandidates.push(buildSimpleStrengthNode([token.right], 'мг', index, index));
+        consumedIndexes.add(index);
+        tokenRoles.set(index, 'strength');
+        continue;
+      }
       if (packCount == null && Number.isFinite(token.count) && token.count > 0) {
         packCount = token.count;
       }
@@ -2282,6 +2405,20 @@ function parseMedicineQuery(rawQuery) {
       strengthCandidates.push(multiComponentRatio);
       consumeRange(multiComponentRatio.startIndex, multiComponentRatio.endIndex, 'strength');
       index = multiComponentRatio.endIndex;
+      continue;
+    }
+
+    if (
+      packCount == null &&
+      tokens[index + 1]?.type === 'CONTAINER' &&
+      tokens[index + 1].containerType === 'sachet' &&
+      Number.isFinite(token.numericValue) &&
+      Number.isInteger(token.numericValue) &&
+      token.numericValue > 0
+    ) {
+      packCount = token.numericValue;
+      consumedIndexes.add(index);
+      tokenRoles.set(index, 'pack');
       continue;
     }
 
@@ -2568,6 +2705,18 @@ function parseMedicineQuery(rawQuery) {
     packCount,
     strengthCandidates,
   });
+  const inferredTrailingPackCount = maybeInferTrailingOralSolidPackCount({
+    tokens,
+    dosageForm,
+    consumedIndexes,
+    tokenRoles,
+    tradeNameTokens,
+    strengthCandidates,
+    packCount,
+  });
+  if (inferredTrailingPackCount != null) {
+    packCount = inferredTrailingPackCount;
+  }
 
   const dosageFormRoute = detectDosageFormRoute(rawQuery);
 
@@ -2671,14 +2820,19 @@ function parseMedicineQuery(rawQuery) {
         }
       }
     }
+    const useFullTradeNameTokens = productType === 'device';
+    const fullTradeNameTokens =
+      (tradeNameTokens.length && !useFullTradeNameTokens) || !fullTradeName
+        ? tradeNameTokens
+        : fullTradeName.split(/\s+/u).filter(Boolean).map((token) => normalizeTradeNameAbbrevToken(token));
     return {
       rawQuery: rawQuery || '',
       normalizedText,
       tokens: annotatedTokens,
-      residueTokens: tradeNameTokens,
+      residueTokens: fullTradeNameTokens,
       attributes: {
         trade_name_text: fullTradeName,
-        trade_name_tokens: tradeNameTokens.map((token) => normalizeTradeNameAbbrevToken(token)),
+        trade_name_tokens: fullTradeNameTokens,
         dosage_form: null,
         dosage_form_token: null,
         dosage_form_source: null,
