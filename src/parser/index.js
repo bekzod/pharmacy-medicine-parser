@@ -798,38 +798,50 @@ function tokenizeMedicineQuery(rawQuery) {
   return tokenizeNormalizedQuery(normalizeMedicineQuery(rawQuery));
 }
 
-// Collect normalized tokens from parenthesized segments that look like
-// vendor/manufacturer abbreviations or other free-text annotations
-// (e.g. "(ника ф.)", "(апельсин)", "(железа 3)", "(forte)"). A paren is
-// treated as noise only when its content has plain WORD/NUMBER tokens and no
-// units, dosage forms, slashes, or count multipliers — spans containing real
-// dosage/pack/measurement signals are left alone. Country names
-// (e.g. "(США)") are still added here but get re-extracted upstream by
-// extractVendorCountryFromTokens before this filter is applied.
-function collectParenthesizedNoiseTokens(rawQuery) {
+function isPlainAnnotationToken(token) {
+  return (
+    (token?.type === 'WORD' && token.normalizedValue) ||
+    (token?.type === 'NUMBER' && Number.isFinite(token.numericValue))
+  );
+}
+
+function addAnnotationNoiseTokens(noise, annotationText) {
+  if (!annotationText || !annotationText.trim()) return;
+
+  const annotationTokens = tokenizeMedicineQuery(annotationText);
+  if (!annotationTokens.length || !annotationTokens.every(isPlainAnnotationToken)) return;
+
+  for (const token of annotationTokens) {
+    const value = token.normalizedValue || token.value;
+    if (!PARENTHESIZED_VARIANT_TOKENS.has(value)) noise.add(value);
+  }
+}
+
+// Collect normalized tokens from annotation-like spans. These spans are treated
+// as noise only when they contain plain WORD/NUMBER tokens and no dosage,
+// pack, measurement, slash, or multiplier signals. Country names can be added
+// here; extractVendorCountryFromTokens re-extracts them before this filter runs.
+function collectAnnotationNoiseTokens(rawQuery) {
   const text = String(rawQuery || '');
   const noise = new Set();
-  if (!text || !text.includes('(')) return noise;
+  if (!text) return noise;
 
-  PAREN_GROUP_RE.lastIndex = 0;
-  let match;
-  while ((match = PAREN_GROUP_RE.exec(text)) !== null) {
-    const inner = match[1];
-    if (!inner || !inner.trim()) continue;
-    const innerTokens = tokenizeMedicineQuery(inner);
-    if (!innerTokens.length) continue;
-    const allAnnotationTokens = innerTokens.every(
-      (token) =>
-        (token.type === 'WORD' && token.normalizedValue) ||
-        (token.type === 'NUMBER' && Number.isFinite(token.numericValue)),
-    );
-    if (!allAnnotationTokens) continue;
-    for (const token of innerTokens) {
-      const value = token.normalizedValue || token.value;
-      if (PARENTHESIZED_VARIANT_TOKENS.has(value)) continue;
-      noise.add(value);
+  if (text.includes('(')) {
+    PAREN_GROUP_RE.lastIndex = 0;
+    let match;
+    while ((match = PAREN_GROUP_RE.exec(text)) !== null) {
+      addAnnotationNoiseTokens(noise, match[1]);
     }
   }
+
+  if (text.includes('№')) {
+    let suffix = '';
+    for (const match of text.matchAll(/№\s*\d+(?:\s*[хx×]\s*\d+)?/giu)) {
+      suffix = text.slice((match.index || 0) + match[0].length);
+    }
+    addAnnotationNoiseTokens(noise, suffix);
+  }
+
   return noise;
 }
 
@@ -1219,6 +1231,33 @@ function shouldKeepNumberAsBrandToken(tokens, index, consumedIndexes) {
 
   if (next?.type === 'WORD' && !hasMeaningfulNext) return false;
   return hasMeaningfulPrevious || hasMeaningfulNext;
+}
+
+function strengthComponentValues(strength) {
+  if (strength?.kind === 'simple' && Array.isArray(strength.values)) return strength.values;
+  if (strength?.kind === 'combination' && Array.isArray(strength.components)) {
+    const units = new Set(strength.components.map((component) => component.unit).filter(Boolean));
+    return units.size === 1 ? strength.components.map((component) => component.value) : [];
+  }
+  return [];
+}
+
+function isDuplicateTotalStrengthMarker(tokens, index, strengthCandidates) {
+  const token = tokens[index];
+  if (token?.type !== 'NUMBER' || !Number.isFinite(token.numericValue) || token.numericValue <= 0) {
+    return false;
+  }
+
+  if (tokens[index + 1]?.type !== 'DOSAGE_FORM') return false;
+
+  for (const strength of strengthCandidates) {
+    const values = strengthComponentValues(strength).filter((value) => Number.isFinite(value));
+    if (values.length < 2) continue;
+    const total = values.reduce((sum, value) => sum + value, 0);
+    if (Math.abs(token.numericValue - total) < 1e-9) return true;
+  }
+
+  return false;
 }
 
 function isVitaminDTradeNameToken(token) {
@@ -2411,8 +2450,12 @@ function parseMedicineQuery(rawQuery) {
 
     if (token.type === 'CONTAINER' || token.type === 'DOSAGE_FORM') continue;
 
-    if (token.type === 'NUMBER' && shouldKeepNumberAsBrandToken(tokens, index, consumedIndexes)) {
-      tradeNameEntries.push({ index, value: token.value, isTradeName: true });
+    if (token.type === 'NUMBER') {
+      if (isDuplicateTotalStrengthMarker(tokens, index, strengthCandidates)) {
+        tokenRoles.set(index, 'strength');
+      } else if (shouldKeepNumberAsBrandToken(tokens, index, consumedIndexes)) {
+        tradeNameEntries.push({ index, value: token.value, isTradeName: true });
+      }
     }
   }
 
@@ -2436,30 +2479,30 @@ function parseMedicineQuery(rawQuery) {
     matchedTokens: vendorCountryTokens,
     remainingTokens: tradeNameResidueTokens,
   } = extractVendorCountryFromTokens(uniqueResidueTokens);
-  const parenNoiseTokens = collectParenthesizedNoiseTokens(rawQuery);
-  // A paren-noise token that appears more than once in the residue is likely
+  const annotationNoiseTokens = collectAnnotationNoiseTokens(rawQuery);
+  // An annotation token that appears more than once in the residue is likely
   // meaningful (not just annotation), so only single-occurrence tokens are
-  // removable. Skip the work entirely when there's no paren noise.
-  const removableParenNoiseTokens = new Set();
-  if (parenNoiseTokens.size) {
+  // removable. Skip the work entirely when there are no annotation tokens.
+  const removableAnnotationNoiseTokens = new Set();
+  if (annotationNoiseTokens.size) {
     const seenResidueTokens = new Set();
     const duplicateResidueTokens = new Set();
     for (const token of residueTokens) {
       if (seenResidueTokens.has(token)) duplicateResidueTokens.add(token);
       else seenResidueTokens.add(token);
     }
-    for (const token of parenNoiseTokens) {
-      if (!duplicateResidueTokens.has(token)) removableParenNoiseTokens.add(token);
+    for (const token of annotationNoiseTokens) {
+      if (!duplicateResidueTokens.has(token)) removableAnnotationNoiseTokens.add(token);
     }
   }
-  const filteredResidueTokens = removableParenNoiseTokens.size
-    ? tradeNameResidueTokens.filter((token) => !removableParenNoiseTokens.has(token))
+  const filteredResidueTokens = removableAnnotationNoiseTokens.size
+    ? tradeNameResidueTokens.filter((token) => !removableAnnotationNoiseTokens.has(token))
     : tradeNameResidueTokens;
-  if (removableParenNoiseTokens.size) {
+  if (removableAnnotationNoiseTokens.size) {
     for (const [tokenIndex, role] of tokenRoles) {
       if (role !== 'trade_name') continue;
       const value = tokens[tokenIndex]?.normalizedValue;
-      if (value && removableParenNoiseTokens.has(value)) tokenRoles.delete(tokenIndex);
+      if (value && removableAnnotationNoiseTokens.has(value)) tokenRoles.delete(tokenIndex);
     }
   }
   const cyrillicTokenSet = new Set(filteredResidueTokens.filter((t) => /[\u0400-\u04ff]/u.test(t)));
