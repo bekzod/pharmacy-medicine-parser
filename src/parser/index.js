@@ -367,6 +367,22 @@ function detectDosageFormRoute(rawQuery) {
   return null;
 }
 
+const ORAL_LIQUID_DOSAGE_FORMS = new Set(['suspension', 'syrup']);
+const ORAL_LIQUID_REFERENCE_VOLUME_ML = new Set([5, 10]);
+
+function inferOralRouteFromLiquidDose(dosageForm, strengthCandidates) {
+  if (!ORAL_LIQUID_DOSAGE_FORMS.has(dosageForm)) return null;
+
+  const hasOralReferenceDose = (strengthCandidates || []).some((strength) => {
+    if (strength?.kind !== 'ratio') return false;
+    if (!MASS_UNITS_FOR_DOSE_INFERENCE.has(strength.unit)) return false;
+    if (strength.denominator?.unit !== 'мл') return false;
+    return ORAL_LIQUID_REFERENCE_VOLUME_ML.has(Number(strength.denominator.value));
+  });
+
+  return hasOralReferenceDose ? 'oral' : null;
+}
+
 // JavaScript's \b is ASCII-only and treats Cyrillic letters as non-word
 // characters, so a leading \b never matches before Cyrillic stems. We use a
 // Unicode-aware negative lookbehind to ensure these stems only match at a real
@@ -2718,7 +2734,9 @@ function parseMedicineQuery(rawQuery) {
     packCount = inferredTrailingPackCount;
   }
 
-  const dosageFormRoute = detectDosageFormRoute(rawQuery);
+  const dosageFormRoute =
+    detectDosageFormRoute(rawQuery)
+    || inferOralRouteFromLiquidDose(dosageForm, strengthCandidates);
 
   maybeInferPowderMilligramStrength({
     tokens,
