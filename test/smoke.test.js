@@ -723,6 +723,85 @@ test('drops trailing generic annotation after ampoule pack count', () => {
   assert.equal(parsed.attributes.pack_count, 5);
 });
 
+test('parses Avicarnitine injection solution abbreviation', () => {
+  const parsed = parseMedicineQuery('авикарнитин р-р д/инь. 200мг/5мл №5');
+
+  assert.equal(parsed.attributes.trade_name_text, 'авикарнитин');
+  assert.equal(parsed.attributes.dosage_form, 'injection');
+  assert.equal(parsed.attributes.dosage_form_route, 'injection');
+  assert.equal(parsed.attributes.container_type, 'ampoule');
+  assert.deepEqual(parsed.attributes.strengths, [
+    {
+      kind: 'ratio',
+      text: '200 мг/5 мл',
+      values: [200],
+      value: 200,
+      unit: 'мг',
+      denominator: { value: 5, unit: 'мл' },
+    },
+  ]);
+  assert.deepEqual(parsed.attributes.volumes, [{ text: '5 мл', value: 5, unit: 'мл' }]);
+  assert.equal(parsed.attributes.pack_count, 5);
+});
+
+test('parses Adrenaline ampoule decimal percent strength', () => {
+  const parsed = parseMedicineQuery('адреналин амп. 0,18% 1мл №10');
+
+  assert.equal(parsed.attributes.trade_name_text, 'адреналин');
+  assert.equal(parsed.attributes.dosage_form, 'injection');
+  assert.equal(parsed.attributes.container_type, 'ampoule');
+  assert.deepEqual(parsed.attributes.strengths, [
+    {
+      kind: 'simple',
+      text: '0.18%',
+      values: [0.18],
+      value: 0.18,
+      unit: '%',
+    },
+  ]);
+  assert.deepEqual(parsed.attributes.volumes, [{ text: '1 мл', value: 1, unit: 'мл' }]);
+  assert.equal(parsed.attributes.pack_count, 10);
+});
+
+test('drops Adaksikam complex package annotation from solution listing', () => {
+  const parsed = parseMedicineQuery('адаксикам р-р 20мг  №3 в комплекс 2мл  №3');
+
+  assert.equal(parsed.attributes.trade_name_text, 'адаксикам');
+  assert.equal(parsed.attributes.dosage_form, 'solution');
+  assert.deepEqual(parsed.attributes.strengths, [
+    {
+      kind: 'simple',
+      text: '20 мг',
+      values: [20],
+      value: 20,
+      unit: 'мг',
+    },
+  ]);
+  assert.deepEqual(parsed.attributes.volumes, [{ text: '2 мл', value: 2, unit: 'мл' }]);
+  assert.equal(parsed.attributes.pack_count, 3);
+});
+
+test('parses Adaksikam lyophilisate injection listing with trailing ingredient', () => {
+  const parsed = parseMedicineQuery(
+    'адаксикам лиоф.д/приг.р-ра.д/инъек.20мг 2мл №3 теноксикам',
+  );
+
+  assert.equal(parsed.attributes.trade_name_text, 'адаксикам');
+  assert.equal(parsed.attributes.dosage_form, 'powder');
+  assert.equal(parsed.attributes.dosage_form_route, 'injection');
+  assert.deepEqual(parsed.attributes.strengths, [
+    {
+      kind: 'simple',
+      text: '20 мг',
+      values: [20],
+      value: 20,
+      unit: 'мг',
+    },
+  ]);
+  assert.deepEqual(parsed.attributes.volumes, [{ text: '2 мл', value: 2, unit: 'мл' }]);
+  assert.equal(parsed.attributes.pack_count, 3);
+});
+
 test('keeps post-pack flavor variants but drops plain trailing annotations', () => {
   const flavor = parseMedicineQuery('аджисепт паст №24 лимон');
   assert.deepEqual(flavor.attributes.trade_name_tokens, ['аджисепт', 'лимон']);
