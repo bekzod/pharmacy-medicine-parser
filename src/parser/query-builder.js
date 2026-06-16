@@ -203,6 +203,36 @@ function buildStrengthSearchTexts(strengths) {
   return [...values];
 }
 
+function addSameUnitComponentTextVariants(
+  values,
+  numericValues,
+  unit,
+  { includeStandaloneComponents = true } = {},
+) {
+  if (!numericValues.length || !unit) return;
+
+  const normalizedUnit = String(unit).toLowerCase();
+  const formattedValues = numericValues.map(formatMeasurementNumber).filter(Boolean);
+  if (formattedValues.length !== numericValues.length) return;
+
+  const componentTexts = formattedValues.map((value) => `${value} ${normalizedUnit}`);
+  const reversedComponentTexts = [...componentTexts].reverse();
+  const reversedValues = [...formattedValues].reverse();
+
+  values.add(`${formattedValues.join('/')} ${normalizedUnit}`);
+  values.add(`${reversedValues.join('/')} ${normalizedUnit}`);
+  values.add(componentTexts.join('/'));
+  values.add(componentTexts.join(', '));
+  values.add(reversedComponentTexts.join('/'));
+  values.add(reversedComponentTexts.join(', '));
+
+  if (includeStandaloneComponents) {
+    for (const componentText of componentTexts) {
+      values.add(componentText);
+    }
+  }
+}
+
 function addSameUnitMultiValueStrengthTexts(values, strength) {
   if (strength?.kind !== 'simple' || !strength.unit) return;
 
@@ -211,18 +241,7 @@ function addSameUnitMultiValueStrengthTexts(values, strength) {
     : [];
   if (numericValues.length < 2 || numericValues.length !== strength.values.length) return;
 
-  const unit = String(strength.unit).toLowerCase();
-  const componentTexts = numericValues.map((value) => `${formatMeasurementNumber(value)} ${unit}`);
-  const reversedComponentTexts = [...componentTexts].reverse();
-
-  values.add(componentTexts.join('/'));
-  values.add(componentTexts.join(', '));
-  values.add(reversedComponentTexts.join('/'));
-  values.add(reversedComponentTexts.join(', '));
-
-  for (const componentText of componentTexts) {
-    values.add(componentText);
-  }
+  addSameUnitComponentTextVariants(values, numericValues, strength.unit);
 }
 
 function buildStrictStrengthSearchTexts(strengths, volumes = []) {
@@ -252,7 +271,9 @@ function buildStrictStrengthSearchTexts(strengths, volumes = []) {
           .map((component) => Number(component?.value))
           .filter((value) => Number.isFinite(value));
         if (componentValues.length === components.length) {
-          values.add(`${componentValues.join('/')} ${units[0]}`);
+          addSameUnitComponentTextVariants(values, componentValues, units[0], {
+            includeStandaloneComponents: false,
+          });
           const totalValue = componentValues.reduce((sum, value) => sum + value, 0);
           const formattedTotalValue = formatMeasurementNumber(totalValue);
           if (formattedTotalValue) {
@@ -444,6 +465,12 @@ function buildMedicineSearchQuery(parsedQuery, options = {}) {
     `${normalizedTradeNameExpr} = :tradeNameQuery`,
     `${normalizedTradeNameExpr} LIKE :tradeNamePrefix || '%' ESCAPE '\\'`,
   ];
+  if (!brandOnlySearch) {
+    tradeNameCandidatePredicates.push(
+      `${normalizedNameExpr} = :tradeNameQuery`,
+      `${normalizedNameExpr} LIKE :tradeNamePrefix || '%' ESCAPE '\\'`,
+    );
+  }
   const nameCandidatePredicates = brandOnlySearch
     ? [
         `${normalizedNameExpr} = :tradeNameQuery`,
