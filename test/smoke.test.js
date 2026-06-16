@@ -580,6 +580,28 @@ test('detects abbreviated oral route for inner-use listings', () => {
   assert.equal(parsed.attributes.pack_count, 10);
 });
 
+test('infers oral route for liquid suspension per-dose strengths', () => {
+  const parsed = parseMedicineQuery('Бакдиар сусп 220мг/5мл №10');
+
+  assert.equal(parsed.attributes.trade_name_text, 'бакдиар');
+  assert.equal(parsed.attributes.dosage_form, 'suspension');
+  assert.equal(parsed.attributes.dosage_form_route, 'oral');
+  assert.deepEqual(parsed.attributes.strengths, [
+    {
+      kind: 'ratio',
+      text: '220 мг/5 мл',
+      values: [220],
+      value: 220,
+      unit: 'мг',
+      denominator: {
+        value: 5,
+        unit: 'мл',
+      },
+    },
+  ]);
+  assert.equal(parsed.attributes.pack_count, 10);
+});
+
 test('parses compact aerosol dose count forms', () => {
   const slashDose = parseMedicineQuery('Беклометазон аэр.250мкг/200 Бинно фарм');
   assert.equal(slashDose.attributes.trade_name_text, 'беклометазон бинно фарм');
