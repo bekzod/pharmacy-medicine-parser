@@ -203,7 +203,12 @@ function buildStrengthSearchTexts(strengths) {
   return [...values];
 }
 
-function addSameUnitComponentTextVariants(values, numericValues, unit) {
+function addSameUnitComponentTextVariants(
+  values,
+  numericValues,
+  unit,
+  { includeStandaloneComponents = true } = {},
+) {
   if (!numericValues.length || !unit) return;
 
   const normalizedUnit = String(unit).toLowerCase();
@@ -221,8 +226,10 @@ function addSameUnitComponentTextVariants(values, numericValues, unit) {
   values.add(reversedComponentTexts.join('/'));
   values.add(reversedComponentTexts.join(', '));
 
-  for (const componentText of componentTexts) {
-    values.add(componentText);
+  if (includeStandaloneComponents) {
+    for (const componentText of componentTexts) {
+      values.add(componentText);
+    }
   }
 }
 
@@ -264,7 +271,9 @@ function buildStrictStrengthSearchTexts(strengths, volumes = []) {
           .map((component) => Number(component?.value))
           .filter((value) => Number.isFinite(value));
         if (componentValues.length === components.length) {
-          addSameUnitComponentTextVariants(values, componentValues, units[0]);
+          addSameUnitComponentTextVariants(values, componentValues, units[0], {
+            includeStandaloneComponents: false,
+          });
           const totalValue = componentValues.reduce((sum, value) => sum + value, 0);
           const formattedTotalValue = formatMeasurementNumber(totalValue);
           if (formattedTotalValue) {

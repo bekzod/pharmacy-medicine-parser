@@ -866,8 +866,13 @@ test('keeps standalone M brand suffix before dosage form', () => {
     strictParsedAttributeFilters: true,
   });
   assert.equal(searchQuery.replacements.tradeNameQuery, 'аллервэй м');
-  assert.ok(Object.values(searchQuery.replacements).includes('10/5 мг'));
-  assert.ok(Object.values(searchQuery.replacements).includes('10 мг/5 мг'));
+  const strictStrengthFilters = Object.entries(searchQuery.replacements)
+    .filter(([key]) => key.startsWith('strengthFilter'))
+    .map(([, value]) => value);
+  assert.ok(strictStrengthFilters.includes('10/5 мг'));
+  assert.ok(strictStrengthFilters.includes('10 мг/5 мг'));
+  assert.ok(!strictStrengthFilters.includes('5 мг'));
+  assert.ok(!strictStrengthFilters.includes('10 мг'));
   assert.ok(
     searchQuery.sql.includes("replace(lower((m.name)::text), 'ё', 'е') LIKE :tradeNamePrefix"),
   );
