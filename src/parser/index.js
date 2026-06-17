@@ -46,6 +46,7 @@ const {
   isSolventVolumeCandidate,
   maybeInferEnzymeActivityStrength,
   maybeInferLiquidPackageVolume,
+  maybeInferOralLiquidSpacedDoseRatio,
   maybeInferOralSolidStrength,
   maybeInferPowderGramStrength,
   maybeInferPowderMilligramStrength,
@@ -637,6 +638,13 @@ function parseMedicineQuery(rawQuery) {
   if (inferredTrailingPackCount != null) {
     packCount = inferredTrailingPackCount;
   }
+
+  maybeInferOralLiquidSpacedDoseRatio({
+    dosageForm,
+    strengthCandidates,
+    volumeCandidates,
+    tokenRoles,
+  });
 
   const dosageFormRoute =
     detectDosageFormRoute(rawQuery)

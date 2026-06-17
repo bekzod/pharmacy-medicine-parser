@@ -39,6 +39,43 @@ function inferOralRouteFromLiquidDose(dosageForm, strengthCandidates) {
 
 const MASS_UNITS_FOR_DOSE_INFERENCE = new Set(['мкг', 'мг', 'г']);
 
+function maybeInferOralLiquidSpacedDoseRatio({
+  dosageForm,
+  strengthCandidates,
+  volumeCandidates,
+  tokenRoles,
+}) {
+  if (!ORAL_LIQUID_DOSAGE_FORMS.has(dosageForm)) return;
+
+  for (let strengthIndex = 0; strengthIndex < strengthCandidates.length; strengthIndex += 1) {
+    const strength = strengthCandidates[strengthIndex];
+    if (strength?.kind !== 'simple') continue;
+    if (!MASS_UNITS_FOR_DOSE_INFERENCE.has(strength.unit)) continue;
+
+    const volumeIndex = volumeCandidates.findIndex(
+      (volume) =>
+        volume?.unit === 'мл' &&
+        ORAL_LIQUID_REFERENCE_VOLUME_ML.has(Number(volume.value)) &&
+        volume.startIndex === strength.endIndex + 1,
+    );
+    if (volumeIndex === -1) continue;
+
+    const denominatorVolume = volumeCandidates[volumeIndex];
+    strengthCandidates[strengthIndex] = buildRatioStrengthNode(
+      strength.values,
+      strength.unit,
+      { value: denominatorVolume.value, unit: denominatorVolume.unit },
+      strength.startIndex,
+      denominatorVolume.endIndex,
+    );
+
+    for (let index = denominatorVolume.startIndex; index <= denominatorVolume.endIndex; index += 1) {
+      tokenRoles.set(index, 'strength');
+    }
+    volumeCandidates.splice(volumeIndex, 1);
+  }
+}
+
 function inferMassUnitFromConcentration(strengthCandidates) {
   for (let i = strengthCandidates.length - 1; i >= 0; i -= 1) {
     const strength = strengthCandidates[i];
@@ -581,6 +618,7 @@ module.exports = {
   detectDosageFormRoute,
   inferOralRouteFromLiquidDose,
   MASS_UNITS_FOR_DOSE_INFERENCE,
+  maybeInferOralLiquidSpacedDoseRatio,
   inferMassUnitFromConcentration,
   inferMultiValuePerDoseStrength,
   isVitaminDTradeNameToken,
