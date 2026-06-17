@@ -331,6 +331,64 @@ test('parses hyphen-glued ratio strength followed by package volume', () => {
   assert.deepEqual(parsed.attributes.volumes, [{ text: '100 мл', value: 100, unit: 'мл' }]);
 });
 
+test('infers oral liquid per-dose ratio from adjacent reference volume', () => {
+  const parsed = parseMedicineQuery('азилаб® суспензия для внутр, прим, 100 мг 5мл 15мл');
+
+  assert.equal(parsed.attributes.trade_name_text, 'азилаб');
+  assert.equal(parsed.attributes.dosage_form, 'suspension');
+  assert.equal(parsed.attributes.dosage_form_route, 'oral');
+  assert.deepEqual(parsed.attributes.strengths, [
+    {
+      kind: 'ratio',
+      text: '100 мг/5 мл',
+      values: [100],
+      value: 100,
+      unit: 'мг',
+      denominator: { value: 5, unit: 'мл' },
+    },
+  ]);
+  assert.deepEqual(parsed.attributes.volumes, [{ text: '15 мл', value: 15, unit: 'мл' }]);
+});
+
+test('does not treat oral liquid reference dose as package volume', () => {
+  const parsed = parseMedicineQuery('Бакдиар сусп 220 мг 5 мл №10');
+
+  assert.equal(parsed.attributes.trade_name_text, 'бакдиар');
+  assert.equal(parsed.attributes.dosage_form, 'suspension');
+  assert.equal(parsed.attributes.dosage_form_route, 'oral');
+  assert.deepEqual(parsed.attributes.strengths, [
+    {
+      kind: 'ratio',
+      text: '220 мг/5 мл',
+      values: [220],
+      value: 220,
+      unit: 'мг',
+      denominator: { value: 5, unit: 'мл' },
+    },
+  ]);
+  assert.deepEqual(parsed.attributes.volumes, []);
+  assert.equal(parsed.attributes.pack_count, 10);
+});
+
+test('keeps spaced infusion strength and package volume separate', () => {
+  const parsed = parseMedicineQuery('аврола р-р.д/инф.500мг 100мл №1');
+
+  assert.equal(parsed.attributes.trade_name_text, 'аврола');
+  assert.equal(parsed.attributes.dosage_form, 'solution');
+  assert.equal(parsed.attributes.dosage_form_route, 'infusion');
+  assert.deepEqual(parsed.attributes.strengths, [
+    {
+      kind: 'simple',
+      text: '500 мг',
+      values: [500],
+      value: 500,
+      unit: 'мг',
+    },
+  ]);
+  assert.deepEqual(parsed.attributes.volumes, [{ text: '100 мл', value: 100, unit: 'мл' }]);
+  assert.equal(parsed.attributes.pack_count, 1);
+});
+
 test('parses compact solution-form strength followed by package volume', () => {
   const parsed = parseMedicineQuery('Элькар р-р300мг/мл100мл№1');
 
@@ -1196,6 +1254,26 @@ test('keeps parenthesized trade-name text when the span contains a dosage signal
   assert.equal(english.attributes.trade_name_text, 'бифолак active');
   assert.deepEqual(english.attributes.trade_name_tokens, ['бифолак', 'active']);
   assert.equal(english.attributes.pack_count, 10);
+});
+
+test('drops parenthesized active ingredient annotation with oral liquid dose', () => {
+  const parsed = parseMedicineQuery('азилаб сусп.15мл №1 (азитромицин 100мг 5мл)');
+
+  assert.equal(parsed.attributes.trade_name_text, 'азилаб');
+  assert.equal(parsed.attributes.dosage_form, 'suspension');
+  assert.equal(parsed.attributes.dosage_form_route, 'oral');
+  assert.deepEqual(parsed.attributes.strengths, [
+    {
+      kind: 'ratio',
+      text: '100 мг/5 мл',
+      values: [100],
+      value: 100,
+      unit: 'мг',
+      denominator: { value: 5, unit: 'мл' },
+    },
+  ]);
+  assert.deepEqual(parsed.attributes.volumes, [{ text: '15 мл', value: 15, unit: 'мл' }]);
+  assert.equal(parsed.attributes.pack_count, 1);
 });
 
 test('classifies toothbrush listings as non-medicine products', () => {

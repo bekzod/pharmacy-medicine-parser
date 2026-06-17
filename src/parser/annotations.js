@@ -15,11 +15,26 @@ function addAnnotationNoiseTokens(noise, annotationText) {
   if (!annotationText || !annotationText.trim()) return;
 
   const annotationTokens = tokenizeMedicineQuery(annotationText);
-  if (!annotationTokens.length || !annotationTokens.every(isPlainAnnotationToken)) return;
+  if (!annotationTokens.length) return;
+
+  if (annotationTokens.every(isPlainAnnotationToken)) {
+    for (const token of annotationTokens) {
+      const value = token.normalizedValue || token.value;
+      if (!PARENTHESIZED_VARIANT_TOKENS.has(value)) noise.add(value);
+    }
+    return;
+  }
+
+  const hasDosageSignal = annotationTokens.some(
+    (token) => token?.type === 'UNIT' || token?.type === 'PERCENT',
+  );
+  if (!hasDosageSignal) return;
 
   for (const token of annotationTokens) {
-    const value = token.normalizedValue || token.value;
-    if (!PARENTHESIZED_VARIANT_TOKENS.has(value)) noise.add(value);
+    if (token?.type !== 'WORD' || !token.normalizedValue) continue;
+    if (!PARENTHESIZED_VARIANT_TOKENS.has(token.normalizedValue)) {
+      noise.add(token.normalizedValue);
+    }
   }
 }
 
