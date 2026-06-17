@@ -1,0 +1,415 @@
+const TOKEN_RE =
+  /\d+(?:\.\d+)?(?:x\d+(?:\.\d+)?|[a-zа-яё]+)?(?:-[a-zа-яё][a-zа-яё0-9]*)*|[a-zа-яё][a-zа-яё0-9]*(?:-[a-zа-яё0-9]+)*|%|\/|\+/giu;
+
+// Russian descriptor / indication words that commonly trail pharmacy listings
+// and shouldn't pollute the trade-name signal. Keep tight to avoid dropping
+// legitimate active-ingredient tokens.
+const PARSER_NOISE_TOKENS = new Set([
+  'антигистаминное',
+  'антигистаминный',
+  'антигистаминная',
+  'антигистаминные',
+  'дезинфир',
+  'дезинфицирующий',
+  'дезинфицирующая',
+  'дезинфицирующее',
+  'дезинфицирующие',
+  'средство',
+  'средства',
+  'средств',
+  'препарат',
+  'препарата',
+  'препараты',
+  'лекарство',
+  'лекарства',
+  'лиофилизированный',
+  'лиофилизированная',
+  'лиофилизированное',
+  'лиофилизированные',
+  'лиофиллизированный',
+  'лиофиллизированная',
+  'лиофиллизированное',
+  'лиофиллизированные',
+  'лиофиллизованный',
+  'лиофиллизованная',
+  'лиофиллизованное',
+  'лиофиллизованные',
+  'гранулированный',
+  'гранулированная',
+  'гранулированное',
+  'гранулированные',
+  'леч',
+  'муж',
+  'жен',
+  'без',
+  'них',
+  'эрекции',
+  'эрекция',
+  'бесплодия',
+  'бесплодие',
+  'потенции',
+  'потенция',
+  'дет',
+  'детей',
+  'детск',
+  'взр',
+  'взрослых',
+  'взрослый',
+  'дозир',
+  'местн',
+  'наружн',
+  'оральный',
+  'оральная',
+  'оральное',
+  'оральные',
+  'приема',
+  'прием',
+  'внутрь',
+  'предварительно',
+  'преднаполненный',
+  'преднаполненные',
+  'наполненный',
+  'наполненные',
+  'заполненный',
+  'заполненная',
+  'заполненные',
+  'мягкий',
+  'мягкая',
+  'мягкое',
+  'мягкие',
+  'желатин',
+  'желатиновый',
+  'желатиновая',
+  'желатиновое',
+  'желатиновые',
+  'алюминиевый',
+  'алюминиевая',
+  'алюминиевые',
+  'полиэтиленовый',
+  'полиэтиленовая',
+  'полиэтиленовые',
+  'полипропиленовый',
+  'полипропиленовая',
+  'полипропиленовые',
+  'полимерный',
+  'полимерная',
+  'полимерное',
+  'полимерные',
+  'контурный',
+  'контурная',
+  'контурное',
+  'контурные',
+  'ячейковый',
+  'ячейковая',
+  'ячейковое',
+  'ячейковые',
+  'безъячейковый',
+  'безъячейковая',
+  'безъячейковое',
+  'безъячейковые',
+  'сахарный',
+  'сахарная',
+  'сахарное',
+  'сахарные',
+  'сахара',
+  'сахарной',
+  'оболочка',
+  'оболочки',
+  'оболочкой',
+  'упаковка',
+  'упаковки',
+  'упаковке',
+  'упаковку',
+  'банка',
+  'банки',
+  'банке',
+  'банку',
+  'микропеллетами',
+  'микропеллеты',
+  'микропеллет',
+  'замедленным',
+  'замедленный',
+  'замедленная',
+  'замедленное',
+  'комплект',
+  'комплекты',
+  'комплекс',
+  'вкус',
+  'вкуса',
+  'вкусом',
+  // NOTE: flavor names (мята, лимон, апельсин, ананас, клубника, etc.) are
+  // intentionally NOT in PARSER_NOISE_TOKENS — they often disambiguate SKUs
+  // (e.g. "Терафлю лимон" vs "Терафлю мед"). Common parenthesized flavors
+  // are preserved by PARENTHESIZED_VARIANT_TOKENS below.
+  'защитный',
+  'защитная',
+  'защитное',
+  'защитные',
+  'защитным',
+  'защитного',
+  'защитной',
+  'мерный',
+  'мерная',
+  'мерное',
+  'мерные',
+  'мерной',
+  'ложка',
+  'ложки',
+  'ложкой',
+  'стаканчик',
+  'стаканчика',
+  'стаканчиком',
+  'колпачок',
+  'колпачка',
+  'колпачке',
+  'колпачки',
+  'grippni',
+  'oldini',
+  'olish',
+  'uchun',
+  'faolsizlantirilgan',
+  'split',
+  'vaksina',
+  'split-vaksina',
+  'сплит',
+  'ваксина',
+  'шип',
+  'шипуч',
+  // Truncated route/route-purpose words that survive the form parser as
+  // bare WORD tokens (e.g. "ПОР. ДЛЯ ИНЪЕК."). Without these, "инъек"
+  // pollutes trade_name_text for injection abbreviations.
+  'инъек',
+  'инъекц',
+  'инъекций',
+  'инъекции',
+  'иньек',
+  'инфузий',
+  'инфузии',
+  'ингаляц',
+  'ингаляции',
+  'иг',
+  'рр',
+  // Pharmacy-listing trailing abbreviations that aren't ingredients or brand
+  // tokens. "ЖР" appears at the tail of solution listings (e.g.
+  // "ГЛЮКОЗА Р-Р 5% 500МЛ ЖР") and pollutes the trade-name signal.
+  'жр',
+  // "БАД" (биологически активная добавка) is a Russian dietary-supplement
+  // category prefix, not part of the brand. Appears as a leading token in
+  // catalog rows like "бад наридон форте капс. №20".
+  'бад',
+]);
+const FLAVOR_VARIANT_TOKENS = [
+  'апельсин',
+  'апельсиновый',
+  'апелсина',
+  'ананас',
+  'вишня',
+  'классический',
+  'клубника',
+  'клубники',
+  'лимон',
+  'лимонный',
+  'малина',
+  'мед',
+  'мёд',
+  'ментол',
+  'мята',
+  'норм',
+  'смородина',
+  'черн',
+  'черная',
+  'ягодные',
+  'ягодный',
+  'эвкалипт',
+];
+const PARENTHESIZED_VARIANT_TOKENS = new Set([
+  'active',
+  'актив',
+  'классик',
+  'swanson',
+  'universal',
+  'горького',
+  'левый',
+  'левая',
+  'правый',
+  'правая',
+  ...FLAVOR_VARIANT_TOKENS,
+]);
+
+const UNIT_FAMILY_BY_VALUE = new Map([
+  ['%', 'percent'],
+  ['ед', 'dose'],
+  ['ме', 'dose'],
+  ['доз', 'dose'],
+  ['мг', 'mass'],
+  ['мкг', 'mass'],
+  ['г', 'mass'],
+  ['кг', 'mass'],
+  ['мл', 'volume'],
+  ['л', 'volume'],
+  ['мм', 'length'],
+  ['см', 'length'],
+  ['м', 'length'],
+  ['ч', 'time'],
+  ['сут', 'time'],
+]);
+
+const SYRINGE_RE = /шприц(?!-?\s*руч)(?:[а-я]*)?/iu;
+const PREFILLED_RE = /преднаполненн|(?:предварительно\s+)?(?:наполненн|заполненн)/iu;
+const PAREN_GROUP_RE = /\(([^()]+)\)/gu;
+const COUNT_BEFORE_FORM_DOSAGE_FORMS = new Set(['capsule', 'tablet']);
+const SIZE_CONTEXT_TOKENS = new Set(['р', 'раз', 'разм', 'размер']);
+
+const CONTAINER_NORMALIZERS = [
+  {
+    pattern: /^(флак\.?|флакон(?:ы|а|е|ов|ам|ами|ах)?|флакон-капельниц[а-я-]*)$/u,
+    containerType: 'vial',
+    dosageForm: 'solution',
+  },
+  {
+    pattern: /^(амп|амп\.|ампул(?:ы|а|е|ов|ам|ами|ах)?)$/u,
+    containerType: 'ampoule',
+    dosageForm: 'injection',
+  },
+  {
+    pattern: /^(карт(?:\.|ридж(?:и|а|ей|ам|ами|ах)?)?)$/u,
+    containerType: 'cartridge',
+    dosageForm: 'injection',
+  },
+  {
+    pattern: /^(блистер(?:ы|а|е|ов|ам|ами|ах)?)$/u,
+    containerType: 'blister',
+  },
+  {
+    pattern: /^(туб(?:а|ы|е|у|ой|ами|ах)?|туб\.?)$/u,
+    containerType: 'tube',
+  },
+  {
+    pattern: /^(тюбик(?:а|и|е|у|ом|ами|ах)?(?:-капельниц[а-я-]*)?)$/u,
+    containerType: 'tube',
+  },
+  {
+    pattern: /^(бутылк(?:а|и|е|у|ой|ами|ах)?)$/u,
+    containerType: 'bottle',
+  },
+  {
+    pattern:
+      /^(пакетик[а-я]*|пакет(?:ы|ов|а|е|ам|ами|ах)?|пакет\.?|паке\.|саше|стик[а-я]*|ф-п)$/u,
+    containerType: 'sachet',
+  },
+];
+
+// Route-of-administration signals that survive in the raw query but get
+// normalized away (e.g. "р-р.инф." collapses to "раствор", losing the
+// infusion qualifier). Detected from rawQuery so the dosage_form_route
+// attribute can preserve them alongside dosage_form. Order matters:
+// infusion patterns (with "инф") must come before injection patterns to
+// avoid "д/инф" partial-matching as injection.
+// "р-р" / "р/р" both appear in pharmacy listings; treat them as equivalent.
+const RP = String.raw`р\s*[-/]\s*р`;
+const DOSAGE_FORM_ROUTE_PATTERNS = [
+  { route: 'rectal', pattern: /(?<![а-я])рект[а-я]*\.?/iu },
+  { route: 'vaginal', pattern: /(?<![а-я])ваг(?:ин[а-я]*)?\.?/iu },
+  { route: 'oral', pattern: /для\s+приема\s+внутрь/iu },
+  { route: 'oral', pattern: /(?:д\s*\/\s*)?при[её](?:м)?[а-я.]*[\s.]+внутрь/iu },
+  { route: 'oral', pattern: /д\s*\/\s*вн(?:утрь)?\.?/iu },
+  { route: 'infusion', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*инф[а-я]*\\.?`, 'iu') },
+  { route: 'infusion', pattern: new RegExp(`${RP}\\.?\\s*для\\s*\\/?\\s*инф[а-я]*\\.?`, 'iu') },
+  { route: 'infusion', pattern: new RegExp(`${RP}\\.?\\s*инф[а-я]*\\.?`, 'iu') },
+  { route: 'infusion', pattern: /д\s*\/\s*инф[а-я]*\.?/iu },
+  { route: 'infusion', pattern: /раствор\s+для\s+(?:внутривенн[а-я]*\s+)?инфузи[а-я]*/iu },
+  { route: 'infusion', pattern: /(?<![а-я])инфуз(?!иол)[а-я]*/iu },
+  // Negative lookahead must exclude "инф" (infusion) AND "инг" (inhalation)
+  // so neither route gets misclassified as injection.
+  { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*ин(?![фг])[а-я]*\\.?`, 'iu') },
+  { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*в\\.?\\s*в\\.?`, 'iu') },
+  { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*п\\s*\\/\\s*к`, 'iu') },
+  {
+    route: 'injection',
+    pattern: new RegExp(`${RP}\\.?\\s*для\\s+(?:в\\s*\\/\\s*[вм]|п\\s*\\/\\s*к)`, 'iu'),
+  },
+  { route: 'injection', pattern: /д\s*\/\s*ин(?!г|ф)[а-я]*\.?/iu },
+  {
+    route: 'injection',
+    pattern:
+      /раствор\s+для\s+(?:инъекци[а-я]*|внутривенн[а-я]*\s+(?:и\s+внутримышечн[а-я]*\s+)?введен[а-я]*|внутримышечн[а-я]*\s+введен[а-я]*)/iu,
+  },
+  { route: 'injection', pattern: /(?<![а-я])инъек[а-я]*/iu },
+  { route: 'injection', pattern: /(?<![а-я])ин-екц[а-я]*/iu },
+];
+
+const ORAL_LIQUID_DOSAGE_FORMS = new Set(['suspension', 'syrup']);
+const ORAL_LIQUID_REFERENCE_VOLUME_ML = new Set([5, 10]);
+
+// JavaScript's \b is ASCII-only and treats Cyrillic letters as non-word
+// characters, so a leading \b never matches before Cyrillic stems. We use a
+// Unicode-aware negative lookbehind to ensure these stems only match at a real
+// word boundary — otherwise "игл" matches inside "Сиглетик", "марл" inside
+// "Марлин", etc., and the row gets misclassified as a device/other product
+// (which forces dosage_form, strengths, and volumes to null).
+const NOT_LETTER_BEHIND = '(?<!\\p{L})';
+const stem = (pattern) => new RegExp(`${NOT_LETTER_BEHIND}${pattern}`, 'iu');
+
+const PRODUCT_TYPE_PATTERNS = {
+  other: [
+    stem('презерватив[а-я]*'),
+    stem('тест.?полос'),
+    stem('test.?strip'),
+    stem('гель-?смазк[а-я]*'),
+    stem('смазк[а-я]*'),
+    /\broll\s*on\b/iu,
+    /\bролл?\s*он\b/iu,
+    /\bdeo\b/iu,
+    stem('подгузник[а-яё]*'),
+    stem('трусик[а-яё]*'),
+    stem('тампон[а-яё]*'),
+    // Gauze: enumerate noun + adjective inflections instead of `марл[а-яё]+`
+    // so trade names like "МАРЛИН" don't get classified as consumer goods.
+    /(?<!\p{L})марл(?:я|и|е|ю|ей|ёй|евый|евая|евое|евые|евыми|евых|евой|евою|евую|евом|евом)(?!\p{L})/iu,
+    stem('пробирк[а-яё]*'),
+    stem('предметное.стекло'),
+    stem('покровное.стекло'),
+    stem('салфетк[а-яё]*'),
+    stem('прокладк[а-яё]*'),
+    stem('гигиенич[а-яё]*'),
+    stem('гиг\\.?\\s*сред[а-яё]*'),
+    stem('бутыл[а-яё]+\\s+с\\s+соск'),
+    stem('соск[а-яё]+'),
+    stem('щетк[а-яё]*'),
+    /детс\.?\s*печ(?:$|[^\p{L}])/iu,
+    /\bpetri\s*dish/iu,
+    stem('чашк[аеёиою]\\s+петри'),
+    /\bmommy'?s?\b/iu,
+  ],
+  devicePrimary: [
+    stem('игл[а-я]*'),
+    stem('шприц(?!-?\\s*руч)(?:[а-я]*)?'),
+    stem('система'),
+    stem('катетер(?:[а-я]*)?'),
+    stem('термометр(?:[а-я]*)?'),
+    stem('тонометр(?:[а-я]*)?'),
+    stem('небулайзер(?:[а-я]*)?'),
+    stem('бандаж(?:[а-я]*)?'),
+    stem('костыл[а-яё]*'),
+    stem('тест[-\\s.]?кассет[а-яё]*'),
+  ],
+  deviceAccessory: [stem('аппликатор\\s+для\\s+кожи')],
+};
+
+module.exports = {
+  TOKEN_RE,
+  PARSER_NOISE_TOKENS,
+  FLAVOR_VARIANT_TOKENS,
+  PARENTHESIZED_VARIANT_TOKENS,
+  UNIT_FAMILY_BY_VALUE,
+  SYRINGE_RE,
+  PREFILLED_RE,
+  PAREN_GROUP_RE,
+  COUNT_BEFORE_FORM_DOSAGE_FORMS,
+  SIZE_CONTEXT_TOKENS,
+  CONTAINER_NORMALIZERS,
+  DOSAGE_FORM_ROUTE_PATTERNS,
+  ORAL_LIQUID_DOSAGE_FORMS,
+  ORAL_LIQUID_REFERENCE_VOLUME_ML,
+  PRODUCT_TYPE_PATTERNS,
+};
