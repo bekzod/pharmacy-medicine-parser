@@ -786,6 +786,24 @@ test('infers bare gram strength for powder vial listings', () => {
   ]);
 });
 
+test('parses compact injectable powder abbreviation with gram strength', () => {
+  const parsed = parseMedicineQuery('эфес пор.д/приг.р-ра д/инъек.5,0г №1');
+
+  assert.equal(parsed.attributes.trade_name_text, 'эфес');
+  assert.equal(parsed.attributes.dosage_form, 'powder');
+  assert.equal(parsed.attributes.dosage_form_route, 'injection');
+  assert.deepEqual(parsed.attributes.strengths, [
+    {
+      kind: 'simple',
+      text: '5 г',
+      values: [5],
+      value: 5,
+      unit: 'г',
+    },
+  ]);
+  assert.equal(parsed.attributes.pack_count, 1);
+});
+
 test('infers bare milligram strength for known powder sachet brands', () => {
   const parsed = parseMedicineQuery('Ноофен порошок 500 №5');
 
