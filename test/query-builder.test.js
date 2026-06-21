@@ -22,8 +22,12 @@ test('admits candidates with no stored strength under strict strength recall', (
   // must not be excluded from recall — otherwise an exact trade-name match with no stored dosage
   // (e.g. "Синуприн") is dropped in favour of a trigram-similar different brand carrying 250 мг.
   assert.ok(
-    searchQuery.sql.includes("OR replace(lower(coalesce(m.strength, '')), 'ё', 'е') = ''"),
+    searchQuery.sql.includes("OR lower(coalesce(m.strength, '')) = ''"),
     'expected the strength filter to admit candidates with NULL/blank strength',
+  );
+  assert.ok(
+    !searchQuery.sql.includes("replace(lower(coalesce(m.strength, '')), 'ё', 'е')"),
+    'expected strict strength recall not to normalize ё/е in SQL',
   );
 });
 
@@ -35,7 +39,7 @@ test('strict strength recall matches comma-delimited stored strength components'
     strictParsedAttributeFilters: true,
   });
 
-  const normalizedStrengthExpr = "replace(lower(coalesce(m.strength, '')), 'ё', 'е')";
+  const normalizedStrengthExpr = "lower(coalesce(m.strength, ''))";
 
   assert.ok(
     Object.values(searchQuery.replacements).includes('20%'),

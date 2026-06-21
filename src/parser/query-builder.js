@@ -1,4 +1,4 @@
-const { escapeLikePattern, normalizeSqlTerm } = require('../medicine-lookup-common');
+const { escapeLikePattern } = require('../medicine-lookup-common');
 
 const BRAND_CANDIDATE_LIMIT_SINGLE = 50;
 const BRAND_CANDIDATE_LIMIT_MIN = 200;
@@ -24,7 +24,7 @@ const TRADE_NAME_SCORE_PARTS = {
 };
 
 function buildDecimalVariants(value) {
-  const normalized = normalizeSqlTerm(value);
+  const normalized = normalizeMatchTerm(value);
   if (!normalized) return [];
 
   const variants = new Set([normalized]);
@@ -36,6 +36,10 @@ function buildDecimalVariants(value) {
   }
 
   return [...variants];
+}
+
+function normalizeMatchTerm(value) {
+  return String(value || '').toLowerCase().trim();
 }
 
 function buildCandidateLimit(limit, offset) {
@@ -331,7 +335,9 @@ function buildStrictVolumeSearchTexts(volumes, strengths) {
         !ratioDenominators.some(
           (denominator) =>
             unitValuesMatch(volume, denominator) ||
-            (volume?.text && denominator?.text && normalizeSqlTerm(volume.text) === normalizeSqlTerm(denominator.text)),
+            (volume?.text &&
+              denominator?.text &&
+              normalizeMatchTerm(volume.text) === normalizeMatchTerm(denominator.text)),
         ),
     ),
   );
@@ -356,7 +362,7 @@ function buildTradeNameTokenSearchTexts(tradeNameTokens) {
 
   for (const token of tradeNameTokens || []) {
     if (values.size >= TRADE_NAME_TOKEN_LIMIT) break;
-    const normalized = normalizeSqlTerm(token);
+    const normalized = normalizeMatchTerm(token);
     if (!normalized) continue;
     if (normalized.length < 2) continue;
     if (
@@ -430,7 +436,7 @@ function buildMedicineSearchQuery(parsedQuery, options = {}) {
   const candidateLimit = Number.isFinite(options.candidateLimit)
     ? Math.max(Math.trunc(options.candidateLimit), limit + offset, 1)
     : buildCandidateLimit(limit, offset);
-  const tradeNameQuery = normalizeSqlTerm(attributes.trade_name_text);
+  const tradeNameQuery = normalizeMatchTerm(attributes.trade_name_text);
   const tradeNamePrefix = escapeLikePattern(tradeNameQuery);
 
   const replacements = {
@@ -440,14 +446,14 @@ function buildMedicineSearchQuery(parsedQuery, options = {}) {
     candidateLimit,
   };
   const normalizedTradeNameExpr = 'm.trade_name';
-  const normalizedNameExpr = "replace(lower((m.name)::text), 'ё', 'е')";
+  const normalizedNameExpr = 'lower((m.name)::text)';
   const normalizedAttributeExpr =
-    "concat_ws(' ', coalesce(m.strength, ''), coalesce(m.volume, ''))";
+    "concat_ws(' ', lower(coalesce(m.strength, '')), lower(coalesce(m.volume, '')))";
   const normalizedAttributeOrNameExpr =
-    "concat_ws(' ', coalesce(m.strength, ''), coalesce(m.volume, ''), coalesce(m.trade_name, ''), replace(lower((m.name)::text), 'ё', 'е'))";
-  const normalizedStrengthExpr = "replace(lower(coalesce(m.strength, '')), 'ё', 'е')";
-  const normalizedVolumeExpr = "replace(lower(coalesce(m.volume, '')), 'ё', 'е')";
-  const normalizedVendorCountryExpr = "replace(lower(coalesce(v.country_name, '')), 'ё', 'е')";
+    "concat_ws(' ', lower(coalesce(m.strength, '')), lower(coalesce(m.volume, '')), lower(coalesce(m.trade_name, '')), lower((m.name)::text))";
+  const normalizedStrengthExpr = "lower(coalesce(m.strength, ''))";
+  const normalizedVolumeExpr = "lower(coalesce(m.volume, ''))";
+  const normalizedVendorCountryExpr = "lower(coalesce(v.country_name, ''))";
   const needsVendorCountryJoin = Boolean(attributes.vendor_country_text);
   const strictParsedAttributeFilters = options.strictParsedAttributeFilters === true;
   const tradeNameTokenSearchTexts = includeTokenFallback
@@ -589,7 +595,7 @@ function buildMedicineSearchQuery(parsedQuery, options = {}) {
       replacements,
       'vendorCountryFilter',
       [attributes.vendor_country_text],
-      (value) => [normalizeSqlTerm(value)],
+      (value) => [normalizeMatchTerm(value)],
     );
     candidateBaseConditions.push(buildLikeAnyCondition([normalizedVendorCountryExpr], vendorCountryKeys));
   }
