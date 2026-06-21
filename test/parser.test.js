@@ -1407,7 +1407,7 @@ test('keeps standalone M brand suffix before dosage form', () => {
   assert.ok(!strictStrengthFilters.includes('5 мг'));
   assert.ok(!strictStrengthFilters.includes('10 мг'));
   assert.ok(
-    searchQuery.sql.includes("replace(lower((m.name)::text), 'ё', 'е') LIKE :tradeNamePrefix"),
+    searchQuery.sql.includes('lower((m.name)::text) LIKE :tradeNamePrefix'),
   );
 });
 
