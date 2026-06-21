@@ -616,7 +616,10 @@ function buildMedicineSearchQuery(parsedQuery, options = {}) {
       strengthSearchTexts,
     );
     const strengthFilterCondition = strictParsedAttributeFilters
-      ? buildExactAnyCondition([normalizedStrengthExpr, normalizedVolumeExpr], strengthFilterKeys)
+      ? `(${[
+          buildDelimitedAnyCondition([normalizedStrengthExpr], strengthFilterKeys),
+          buildExactAnyCondition([normalizedVolumeExpr], strengthFilterKeys),
+        ].join(' OR ')})`
       : buildLikeAnyCondition([normalizedAttributeOrNameExpr], strengthFilterKeys);
     // A candidate with no stored strength cannot contradict the parsed strength (omission is
     // not a mismatch), so admit it and let scoring rank it — otherwise an exact-name match with

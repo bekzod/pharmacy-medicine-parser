@@ -26,3 +26,35 @@ test('admits candidates with no stored strength under strict strength recall', (
     'expected the strength filter to admit candidates with NULL/blank strength',
   );
 });
+
+test('strict strength recall matches comma-delimited stored strength components', () => {
+  const parsed = parseMedicineQuery('АЛЬБУНОРМ Р-Р 20% 50МЛ');
+  const searchQuery = buildMedicineSearchQuery(parsed, {
+    limit: 5,
+    requireParsedAttributeMatch: true,
+    strictParsedAttributeFilters: true,
+  });
+
+  const normalizedStrengthExpr = "replace(lower(coalesce(m.strength, '')), 'ё', 'е')";
+
+  assert.ok(
+    Object.values(searchQuery.replacements).includes('20%'),
+    'expected the parsed 20% strength to feed the candidate filter',
+  );
+  assert.ok(
+    searchQuery.sql.includes(`${normalizedStrengthExpr} = :strengthFilter0_0`),
+    'expected strict strength recall to keep exact component matching',
+  );
+  assert.ok(
+    searchQuery.sql.includes(`${normalizedStrengthExpr} LIKE :strengthFilter0_0 || ',%'`),
+    'expected strict strength recall to match the first component in comma-delimited strength',
+  );
+  assert.ok(
+    searchQuery.sql.includes(`${normalizedStrengthExpr} LIKE '%, ' || :strengthFilter0_0`),
+    'expected strict strength recall to match later comma-delimited strength components',
+  );
+  assert.ok(
+    !searchQuery.sql.includes(`${normalizedStrengthExpr} LIKE '%' || :strengthFilter0_0 || '%'`),
+    'expected strict strength recall not to use broad substring matching',
+  );
+});
