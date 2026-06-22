@@ -596,15 +596,13 @@ function parseMedicineQuery(rawQuery) {
     }
   }
   const cyrillicTokenSet = new Set(filteredResidueTokens.filter((t) => /[\u0400-\u04ff]/u.test(t)));
-  const tradeNameTokens = normalizeWetWipesTradeTokens(normalizeCottonTradeTokens(filteredResidueTokens
-    .filter((token) => {
+  const tradeNameTokens = normalizeWetWipesTradeTokens(normalizeCottonTradeTokens(
+    normalizeTradeNameAbbrevTokens(filteredResidueTokens.filter((token) => {
       if (/[\u0400-\u04ff]/u.test(token)) return true;
       const transliterated = transliterateLatinToCyrillic(token);
       return !cyrillicTokenSet.has(transliterated);
-    })
-    .flatMap((token) =>
-      normalizeTradeNameAbbrevToken(token).split(/\s+/u).filter(Boolean),
-    )));
+    })),
+  ));
 
   maybeInferVitaminDStrength({
     state,
@@ -790,7 +788,5 @@ function parseMedicineQuery(rawQuery) {
 }
 
 module.exports = {
-  normalizeMedicineQuery,
   parseMedicineQuery,
-  tokenizeMedicineQuery,
 };

@@ -252,13 +252,8 @@ function normalizeMedicineQuery(rawQuery) {
 }
 
 module.exports = {
-  normalizeLatinHomoglyphs,
-  normalizeSqlTerm,
+  normalizeMedicineQuery,
   normalizeTradeNameAbbrevToken,
   normalizeFormTokenValue,
-  normalizeAttachedUnit,
-  normalizeNumberUnitPair,
   parseContainerType,
-  normalizeRawSegment,
-  normalizeMedicineQuery,
 };

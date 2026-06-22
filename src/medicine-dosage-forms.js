@@ -56,7 +56,13 @@ const MEDICINE_DOSAGE_FORMS = [
   },
   {
     form: 'infusion',
-    parsePatterns: [/р\s*-\s*р\.?\s*д\s*\/\s*инф\.?/iu, /р\s*-\s*р\.?\s*для\s*\/\s*инф\.?/iu],
+    parsePatterns: [
+      /р\s*-\s*р\.?\s*д\s*\/\s*инф\.?/iu,
+      /р\s*-\s*р\.?\s*для\s*\/\s*инф\.?/iu,
+      /инфуз(?!иол)/iu,
+      /д\/инф/iu,
+      wholeToken('инф\\.?'),
+    ],
     profile: {
       token: 'инф',
       priority: 3,
@@ -69,7 +75,21 @@ const MEDICINE_DOSAGE_FORMS = [
       /р\s*-\s*р\.?\s*д\s*\/\s*ин\.?/iu,
       /р\s*-\s*р\.?\s*д\s*\/\s*в\.?\s*в\.?/iu,
       /р\s*-\s*р\.?\s*д\s*\/\s*п\s*\/\s*к\.?\s*ин\.?/iu,
+      wholeToken('амп\\.?'),
+      /инъекц/iu,
+      /шприц/iu,
+      /карт(?:\.|ридж)/iu,
+      /ампул/iu,
+      /ин-екц/iu,
+      /д\/ин[ъь]?екц/iu,
+      /д\/ин\./iu,
+      /д\/в\.?в\.?\s*введ/iu,
     ],
+    profile: {
+      token: 'амп',
+      priority: 6,
+      tokenPatterns: [/^(амп|амп\.|ампул[а-я]*|ampoules?)$/u],
+    },
   },
   {
     form: 'solution',
@@ -120,29 +140,6 @@ const MEDICINE_DOSAGE_FORMS = [
       priority: 4,
       tokenPatterns: [/^(капл\.?|капля|капли|к-ли|drops?)$/u],
     },
-  },
-  {
-    form: 'injection',
-    parsePatterns: [
-      wholeToken('амп\\.?'),
-      /инъекц/iu,
-      /шприц/iu,
-      /карт(?:\.|ридж)/iu,
-      /ампул/iu,
-      /ин-екц/iu,
-      /д\/ин[ъь]?екц/iu,
-      /д\/ин\./iu,
-      /д\/в\.?в\.?\s*введ/iu,
-    ],
-    profile: {
-      token: 'амп',
-      priority: 6,
-      tokenPatterns: [/^(амп|амп\.|ампул[а-я]*|ampoules?)$/u],
-    },
-  },
-  {
-    form: 'infusion',
-    parsePatterns: [/инфуз(?!иол)/iu, /д\/инф/iu, wholeToken('инф\\.?')],
   },
   {
     form: 'powder',
@@ -208,7 +205,19 @@ const MEDICINE_DOSAGE_FORMS = [
   },
   {
     form: 'aerosol',
-    parsePatterns: [/аэр\.?\s*д\s*\/\s*инг\.?/iu],
+    parsePatterns: [
+      /аэр\.?\s*д\s*\/\s*инг\.?/iu,
+      /аэрозол/iu,
+      wholeToken('аэроз\\.?'),
+      wholeToken('аэро\\.?'),
+      wholeToken('аэр\\.?'),
+      wholeToken('пена'),
+    ],
+    profile: {
+      token: 'аэрозоль',
+      priority: 4,
+      tokenPatterns: [/^(аэр|аэр\.|аэро|аэро\.|аэроз\.?|аэрозол[а-я]*|aerosol|пен[а-яё]{0,3})$/u],
+    },
   },
   {
     form: 'inhaler',
@@ -225,21 +234,6 @@ const MEDICINE_DOSAGE_FORMS = [
       token: 'инг',
       priority: 4,
       tokenPatterns: [/^(инг|ингал\.?|ингаляци[а-я]*|ингалятор[а-я]*|небул[а-я]*)$/u],
-    },
-  },
-  {
-    form: 'aerosol',
-    parsePatterns: [
-      /аэрозол/iu,
-      wholeToken('аэроз\\.?'),
-      wholeToken('аэро\\.?'),
-      wholeToken('аэр\\.?'),
-      wholeToken('пена'),
-    ],
-    profile: {
-      token: 'аэрозоль',
-      priority: 4,
-      tokenPatterns: [/^(аэр|аэр\.|аэро|аэро\.|аэроз\.?|аэрозол[а-я]*|aerosol|пен[а-яё]{0,3})$/u],
     },
   },
   {
@@ -355,8 +349,6 @@ function parseDosageForm(name) {
 }
 
 module.exports = {
-  DOSAGE_FORM_PATTERNS,
-  MEDICINE_DOSAGE_FORMS,
   MEDICINE_FORM_NORMALIZERS,
   MEDICINE_FORM_PRIORITIES,
   MEDICINE_FORM_TO_DOSAGE_FORMS,

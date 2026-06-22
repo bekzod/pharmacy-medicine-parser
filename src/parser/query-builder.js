@@ -812,5 +812,4 @@ function buildMedicineSearchQuery(parsedQuery, options = {}) {
 
 module.exports = {
   buildMedicineSearchQuery,
-  formatMeasurementNumber,
 };

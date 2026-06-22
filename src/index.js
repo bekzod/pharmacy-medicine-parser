@@ -1,11 +1,11 @@
-const parser = require('./parser');
-const queryBuilder = require('./parser/query-builder');
-const lookupProfiles = require('./medicine-lookup-profiles');
-const fuzzySearch = require('./medicine-fuzzy-search');
+const { parseMedicineQuery } = require('./parser');
+const { buildMedicineSearchQuery } = require('./parser/query-builder');
+const { buildQueryLookupProfiles } = require('./medicine-lookup-profiles');
+const { buildQueryVariants } = require('./medicine-fuzzy-search');
 
 module.exports = {
-  ...parser,
-  ...queryBuilder,
-  ...lookupProfiles,
-  ...fuzzySearch,
+  parseMedicineQuery,
+  buildMedicineSearchQuery,
+  buildQueryLookupProfiles,
+  buildQueryVariants,
 };
