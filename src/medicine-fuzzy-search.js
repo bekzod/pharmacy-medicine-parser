@@ -327,29 +327,13 @@ function transliterateLatinToCyrillic(value) {
   return result.replace(/л(?=\p{L})(?![аеёийоуыэюяьъл])/gu, 'ль');
 }
 
-function buildLatinMedicinePhoneticVariants(value) {
+function buildMedicinePhoneticVariants(value, replacements) {
   const normalized = normalizeQuery(value);
   if (!normalized) return [];
 
   const variants = [];
 
-  for (const [pattern, replacement] of LATIN_MEDICINE_PHONETIC_REPLACEMENTS) {
-    const phoneticVariant = normalizeQuery(normalized.replace(pattern, replacement));
-    if (phoneticVariant && phoneticVariant !== normalized) {
-      variants.push(phoneticVariant);
-    }
-  }
-
-  return [...new Set(variants)];
-}
-
-function buildCyrillicMedicinePhoneticVariants(value) {
-  const normalized = normalizeQuery(value);
-  if (!normalized) return [];
-
-  const variants = [];
-
-  for (const [pattern, replacement] of CYRILLIC_MEDICINE_PHONETIC_REPLACEMENTS) {
+  for (const [pattern, replacement] of replacements) {
     const phoneticVariant = normalizeQuery(normalized.replace(pattern, replacement));
     if (phoneticVariant && phoneticVariant !== normalized) {
       variants.push(phoneticVariant);
@@ -364,16 +348,19 @@ function buildQueryVariants(rawQuery) {
   const layoutConverted = normalizeQuery(convertLatinLayoutToCyrillic(rawQuery));
   const transliterated = normalizeQuery(transliterateLatinToCyrillic(rawQuery));
   const latinPhoneticVariants = [
-    ...buildLatinMedicinePhoneticVariants(original),
-    ...buildLatinMedicinePhoneticVariants(layoutConverted),
-    ...buildLatinMedicinePhoneticVariants(transliterated),
+    ...buildMedicinePhoneticVariants(original, LATIN_MEDICINE_PHONETIC_REPLACEMENTS),
+    ...buildMedicinePhoneticVariants(layoutConverted, LATIN_MEDICINE_PHONETIC_REPLACEMENTS),
+    ...buildMedicinePhoneticVariants(transliterated, LATIN_MEDICINE_PHONETIC_REPLACEMENTS),
   ];
   const cyrillicPhoneticVariants = [
-    ...buildCyrillicMedicinePhoneticVariants(transliterated),
+    ...buildMedicinePhoneticVariants(transliterated, CYRILLIC_MEDICINE_PHONETIC_REPLACEMENTS),
     ...latinPhoneticVariants
       .map((variant) => normalizeQuery(transliterateLatinToCyrillic(variant)))
       .filter(Boolean),
-  ].flatMap((variant) => [variant, ...buildCyrillicMedicinePhoneticVariants(variant)]);
+  ].flatMap((variant) => [
+    variant,
+    ...buildMedicinePhoneticVariants(variant, CYRILLIC_MEDICINE_PHONETIC_REPLACEMENTS),
+  ]);
 
   return [
     ...new Set(
@@ -390,12 +377,7 @@ function buildQueryVariants(rawQuery) {
 
 module.exports = {
   buildQueryVariants,
-  buildLatinMedicinePhoneticVariants,
-  buildCyrillicMedicinePhoneticVariants,
   normalizeMedicineFormPhrases,
   normalizeQuery,
-  normalizeLatinDominantMixedScriptTokens,
   transliterateLatinToCyrillic,
-  LATIN_TO_CYRILLIC_TRANSLIT_SINGLE,
-  LATIN_TO_CYRILLIC_TRANSLIT_MULTI,
 };
