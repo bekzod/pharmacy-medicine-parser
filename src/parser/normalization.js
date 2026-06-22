@@ -198,6 +198,7 @@ function normalizeMedicineQuery(rawQuery) {
     .replace(/№\s*(\d+)/gu, '')
     .replace(/№/gu, '')
     .replace(/\\/gu, '/')
+    .replace(/(?<![а-яёa-z0-9])н\s*\/\s*с(?![а-яёa-z0-9])/giu, ' нестер ')
     .replace(/[,:;!?()[\]{}"'`«»]+/gu, ' ')
     .replace(/(?<!\d)\.(?!\d)/gu, ' ')
     .replace(/(?<=\p{L})\.(?=\d)/gu, ' ')
