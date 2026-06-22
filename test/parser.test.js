@@ -153,6 +153,12 @@ const implicitStrengthCases = [
   pack_count: 20,
   strengths: [ { kind: 'simple', text: '25000 ед', values: [ 25000 ], value: 25000, unit: 'ед' } ]
 }],
+  ['parses spaced thousands activity units glued to unit', 'аквадетрим капс. 2 000ме №30', {
+  trade_name_text: 'аквадетрим',
+  dosage_form: 'capsule',
+  pack_count: 30,
+  strengths: [ { kind: 'simple', text: '2000 ме', values: [ 2000 ], value: 2000, unit: 'ме' } ]
+}],
   ['infers low bare tablet strength for Olfrex', 'ОЛФРЕКС 5 ТАБ. №28', {
   trade_name_text: 'олфрекс',
   strengths: [ { kind: 'simple', text: '5 мг', values: [ 5 ], value: 5, unit: 'мг' } ]
