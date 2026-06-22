@@ -37,7 +37,6 @@ const {
 const {
   ORAL_SOLID_FORMS_WITH_IMPLICIT_MG,
   detectDosageFormRoute,
-  dropCandidatesMatching,
   findSolventClauseStartIndex,
   hasPrefilledSyringeSignal,
   hasRepeatedStrengthNumberLater,
@@ -64,10 +63,12 @@ const {
   recoverHyphenatedEnemaTradeName,
   shouldKeepNumberAsBrandToken,
 } = require('./trade-name');
+const { ParseState } = require('./state');
 
 function parseMedicineQuery(rawQuery) {
   const normalizedText = normalizeMedicineQuery(rawQuery);
   const tokens = tokenizeNormalizedQuery(normalizedText);
+  const state = new ParseState({ rawQuery, normalizedText, tokens });
   for (let index = 1; index < tokens.length; index += 1) {
     const token = tokens[index];
     const previous = tokens[index - 1];
@@ -85,40 +86,24 @@ function parseMedicineQuery(rawQuery) {
       };
     }
   }
-  const consumedIndexes = new Set();
-  const tokenRoles = new Map();
-  const consumeRange = (startIndex, endIndex, role) => {
-    for (let i = startIndex; i <= endIndex; i += 1) {
-      consumedIndexes.add(i);
-      tokenRoles.set(i, role);
-    }
-  };
-  const strengthCandidates = [];
-  const volumeCandidates = [];
-  let dosageForm = null;
-  let dosageFormToken = null;
-  let dosageFormSource = null;
-  let containerType = null;
-  let packCount = null;
-
   // Extract pack count from №N / №NxM patterns directly from raw query (last one wins).
   let hasRawPackMultiplier = false;
   for (const match of (rawQuery || '').matchAll(/№\s*(\d+)\s*[хx×]\s*(\d+)/giu)) {
     const left = Number.parseInt(match[1], 10);
     const right = Number.parseInt(match[2], 10);
     if (Number.isFinite(left) && Number.isFinite(right) && left > 0 && right > 0) {
-      packCount = left * right;
+      state.setPackCount(left * right);
       hasRawPackMultiplier = true;
     }
   }
   for (const match of (rawQuery || '').matchAll(/№\s*(\d+)(?!\d)(?!\s*[хx×]\s*\d)/giu)) {
-    packCount = Number.parseInt(match[1], 10);
+    state.setPackCount(Number.parseInt(match[1], 10));
   }
 
   for (let index = 0; index < tokens.length; index += 1) {
     let token = tokens[index];
 
-    const inferredBareKapDosageForm = inferBareKapDosageForm(tokens, index, packCount);
+    const inferredBareKapDosageForm = inferBareKapDosageForm(tokens, index, state.packCount);
     if (inferredBareKapDosageForm) {
       token = {
         ...token,
@@ -137,25 +122,20 @@ function parseMedicineQuery(rawQuery) {
         Number.isInteger(nextToken.numericValue) &&
         nextToken.numericValue > 0
       ) {
-        if (packCount == null) {
-          packCount = nextToken.numericValue;
-        }
-        consumedIndexes.add(index);
-        consumedIndexes.add(index + 1);
-        tokenRoles.set(index, 'pack');
-        tokenRoles.set(index + 1, 'pack');
+        state.setPackCount(nextToken.numericValue, { onlyIfEmpty: true });
+        state.consume(index, 'pack');
+        state.consume(index + 1, 'pack');
         index += 1;
         continue;
       }
-      consumedIndexes.add(index);
-      tokenRoles.set(index, 'pack');
+      state.consume(index, 'pack');
       continue;
     }
 
     if (token.type === 'COUNT_MULTIPLIER') {
       const nextToken = tokens[index + 1];
       if (nextToken?.type === 'UNIT') {
-        volumeCandidates.push(
+        state.addVolume(
           buildMeasurementNode(
             { value: token.normalizedValue, normalizedValue: null },
             { normalizedValue: nextToken.normalizedValue },
@@ -163,88 +143,53 @@ function parseMedicineQuery(rawQuery) {
             index + 1,
           ),
         );
-        consumedIndexes.add(index);
-        consumedIndexes.add(index + 1);
-        tokenRoles.set(index, 'volume');
-        tokenRoles.set(index + 1, 'volume');
+        state.consume(index, 'volume');
+        state.consume(index + 1, 'volume');
         index += 1;
         continue;
       }
       if (
-        dosageForm &&
-        ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(dosageForm) &&
+        state.dosageForm &&
+        ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(state.dosageForm) &&
         Number.isFinite(token.right) &&
         token.right >= 100
       ) {
-        strengthCandidates.push(buildSimpleStrengthNode([token.right], 'мг', index, index));
-        consumedIndexes.add(index);
-        tokenRoles.set(index, 'strength');
+        state.addStrength(buildSimpleStrengthNode([token.right], 'мг', index, index));
+        state.consume(index, 'strength');
         continue;
       }
-      if (packCount == null && Number.isFinite(token.count) && token.count > 0) {
-        packCount = token.count;
+      if (state.packCount == null && Number.isFinite(token.count) && token.count > 0) {
+        state.setPackCount(token.count);
       }
-      consumedIndexes.add(index);
-      tokenRoles.set(index, 'pack');
+      state.consume(index, 'pack');
       continue;
     }
 
     if (hasRawPackMultiplier && token.type === 'WORD' && /^x\d+$/u.test(token.value)) {
-      consumedIndexes.add(index);
-      tokenRoles.set(index, 'pack');
+      state.consume(index, 'pack');
       continue;
     }
 
     if (token.type === 'DOSAGE_FORM') {
-      const sourcePriority = token.dosageFormSource === 'explicit' ? 2 : 1;
-      const currentSourcePriority =
-        dosageFormSource === 'explicit'
-          ? 2
-          : dosageFormSource === 'inferred_from_container'
-            ? 1
-            : 0;
-      const keepCurrentDosageForm = shouldKeepCurrentDosageForm({
-        currentDosageForm: dosageForm,
-        currentSource: dosageFormSource,
-        nextDosageForm: token.dosageForm,
-        nextSource: token.dosageFormSource,
+      state.considerDosageFormToken(token, {
+        shouldKeepCurrentDosageForm,
+        shouldOverrideDosageFormForFinalForm,
       });
 
-      const overrideForFinalForm = shouldOverrideDosageFormForFinalForm(
-        dosageForm,
-        token.dosageForm,
-      );
+      if (token.containerType) state.setContainerType(token.containerType);
 
-      if (
-        !keepCurrentDosageForm &&
-        (overrideForFinalForm ||
-          !dosageFormToken ||
-          sourcePriority > currentSourcePriority ||
-          (sourcePriority === currentSourcePriority && token.priority >= dosageFormToken.priority))
-      ) {
-        dosageForm = token.dosageForm;
-        dosageFormToken = token;
-        dosageFormSource = token.dosageFormSource;
-      }
-
-      if (!containerType && token.containerType) {
-        containerType = token.containerType;
-      }
-
-      consumedIndexes.add(index);
-      tokenRoles.set(index, 'dosage_form');
+      state.consume(index, 'dosage_form');
       continue;
     }
 
     if (token.type === 'CONTAINER') {
-      if (!containerType) containerType = token.containerType;
-      consumedIndexes.add(index);
-      tokenRoles.set(index, 'container');
+      state.setContainerType(token.containerType);
+      state.consume(index, 'container');
     }
   }
 
   for (let index = 0; index < tokens.length; index += 1) {
-    if (consumedIndexes.has(index)) continue;
+    if (state.hasConsumed(index)) continue;
 
     const token = tokens[index];
 
@@ -261,7 +206,7 @@ function parseMedicineQuery(rawQuery) {
       UNIT_FAMILY_BY_VALUE.get(tokens[index + 4].normalizedValue) === 'length'
     ) {
       const dimensionText = `${token.value} ${tokens[index + 1].normalizedValue} х ${tokens[index + 3].value} ${tokens[index + 4].normalizedValue}`;
-      volumeCandidates.push({
+      state.addVolume({
         text: dimensionText,
         value: Number.parseFloat(token.value),
         unit: tokens[index + 1].normalizedValue,
@@ -272,15 +217,15 @@ function parseMedicineQuery(rawQuery) {
         startIndex: index,
         endIndex: index + 4,
       });
-      consumeRange(index, index + 4, 'volume');
+      state.consumeRange(index, index + 4, 'volume');
       index = index + 4;
       continue;
     }
 
     const combinationStrength = buildCombinationStrengthCandidate(tokens, index);
     if (combinationStrength) {
-      strengthCandidates.push(combinationStrength);
-      consumeRange(combinationStrength.startIndex, combinationStrength.endIndex, 'strength');
+      state.addStrength(combinationStrength);
+      state.consumeRange(combinationStrength.startIndex, combinationStrength.endIndex, 'strength');
       index = combinationStrength.endIndex;
       continue;
     }
@@ -288,31 +233,28 @@ function parseMedicineQuery(rawQuery) {
     const plusSeparatedSharedDenominatorRatio =
       buildPlusSeparatedSharedDenominatorRatioStrength(tokens, index);
     if (plusSeparatedSharedDenominatorRatio) {
-      strengthCandidates.push(plusSeparatedSharedDenominatorRatio);
-      for (
-        let consumedIndex = plusSeparatedSharedDenominatorRatio.startIndex;
-        consumedIndex <= plusSeparatedSharedDenominatorRatio.endIndex;
-        consumedIndex += 1
-      ) {
-        consumedIndexes.add(consumedIndex);
-        tokenRoles.set(consumedIndex, 'strength');
-      }
+      state.addStrength(plusSeparatedSharedDenominatorRatio);
+      state.consumeRange(
+        plusSeparatedSharedDenominatorRatio.startIndex,
+        plusSeparatedSharedDenominatorRatio.endIndex,
+        'strength',
+      );
       index = plusSeparatedSharedDenominatorRatio.endIndex;
       continue;
     }
 
     const percentStrength = buildPercentStrengthNode(tokens, index);
     if (percentStrength) {
-      strengthCandidates.push(percentStrength);
-      consumeRange(percentStrength.startIndex, percentStrength.endIndex, 'strength');
+      state.addStrength(percentStrength);
+      state.consumeRange(percentStrength.startIndex, percentStrength.endIndex, 'strength');
       index = percentStrength.endIndex;
       continue;
     }
 
     const plusSeparatedSharedUnit = buildPlusSeparatedSharedUnitStrength(tokens, index);
     if (plusSeparatedSharedUnit) {
-      strengthCandidates.push(plusSeparatedSharedUnit);
-      consumeRange(
+      state.addStrength(plusSeparatedSharedUnit);
+      state.consumeRange(
         plusSeparatedSharedUnit.startIndex,
         plusSeparatedSharedUnit.endIndex,
         'strength',
@@ -323,28 +265,27 @@ function parseMedicineQuery(rawQuery) {
 
     const multiComponentRatio = buildMultiComponentRatioStrength(tokens, index);
     if (multiComponentRatio) {
-      strengthCandidates.push(multiComponentRatio);
-      consumeRange(multiComponentRatio.startIndex, multiComponentRatio.endIndex, 'strength');
+      state.addStrength(multiComponentRatio);
+      state.consumeRange(multiComponentRatio.startIndex, multiComponentRatio.endIndex, 'strength');
       index = multiComponentRatio.endIndex;
       continue;
     }
 
     if (
-      packCount == null &&
+      state.packCount == null &&
       tokens[index + 1]?.type === 'CONTAINER' &&
       tokens[index + 1].containerType === 'sachet' &&
       Number.isFinite(token.numericValue) &&
       Number.isInteger(token.numericValue) &&
       token.numericValue > 0
     ) {
-      packCount = token.numericValue;
-      consumedIndexes.add(index);
-      tokenRoles.set(index, 'pack');
+      state.setPackCount(token.numericValue);
+      state.consume(index, 'pack');
       continue;
     }
 
     if (
-      packCount == null &&
+      state.packCount == null &&
       tokens[index + 1]?.type === 'DOSAGE_FORM' &&
       COUNT_BEFORE_FORM_DOSAGE_FORMS.has(tokens[index + 1].dosageForm) &&
       Number.isFinite(token.numericValue) &&
@@ -352,9 +293,8 @@ function parseMedicineQuery(rawQuery) {
       token.numericValue > 0 &&
       !hasRepeatedStrengthNumberLater(tokens, index)
     ) {
-      packCount = token.numericValue;
-      consumedIndexes.add(index);
-      tokenRoles.set(index, 'pack');
+      state.setPackCount(token.numericValue);
+      state.consume(index, 'pack');
       continue;
     }
 
@@ -368,10 +308,10 @@ function parseMedicineQuery(rawQuery) {
       strengthNode.kind === 'simple' &&
       (unitFamily === 'volume' || unitFamily === 'length' || isDoseCount);
     if (isDoseCount) {
-      const perDoseStrength = inferMultiValuePerDoseStrength(strengthNode, strengthCandidates);
+      const perDoseStrength = inferMultiValuePerDoseStrength(strengthNode, state.strengthCandidates);
       if (perDoseStrength) {
-        strengthCandidates.push(perDoseStrength);
-        consumeRange(strengthNode.startIndex, strengthNode.endIndex, 'strength');
+        state.addStrength(perDoseStrength);
+        state.consumeRange(strengthNode.startIndex, strengthNode.endIndex, 'strength');
         index = strengthNode.endIndex;
         continue;
       }
@@ -379,12 +319,12 @@ function parseMedicineQuery(rawQuery) {
 
     if (isVolumeNode) {
       const measurementNode = buildMeasurementNodeFromStrength(strengthNode);
-      if (measurementNode) volumeCandidates.push(measurementNode);
+      if (measurementNode) state.addVolume(measurementNode);
     } else {
-      strengthCandidates.push(strengthNode);
+      state.addStrength(strengthNode);
     }
 
-    consumeRange(
+    state.consumeRange(
       strengthNode.startIndex,
       strengthNode.endIndex,
       isVolumeNode ? 'volume' : 'strength',
@@ -394,7 +334,7 @@ function parseMedicineQuery(rawQuery) {
 
   const PRECISE_STRENGTH_UNITS = new Set(['мг', 'мкг', '%']);
   const TOPICAL_PACKAGE_FORMS = new Set(['cream', 'ointment', 'gel', 'paste']);
-  const hasPreciserStrength = strengthCandidates.some(
+  const hasPreciserStrength = state.strengthCandidates.some(
     (s) =>
       (s.kind === 'ratio' && UNIT_FAMILY_BY_VALUE.get(s.denominator?.unit) === 'volume') ||
       (s.kind === 'ratio' && UNIT_FAMILY_BY_VALUE.get(s.denominator?.unit) === 'mass') ||
@@ -402,12 +342,12 @@ function parseMedicineQuery(rawQuery) {
       (s.kind === 'simple' && PRECISE_STRENGTH_UNITS.has(s.unit)) ||
       (s.kind === 'combination' && s.components?.some((c) => PRECISE_STRENGTH_UNITS.has(c.unit))),
   );
-  const isTopicalForm = TOPICAL_PACKAGE_FORMS.has(dosageForm);
+  const isTopicalForm = TOPICAL_PACKAGE_FORMS.has(state.dosageForm);
   if (hasPreciserStrength || isTopicalForm) {
-    for (let i = strengthCandidates.length - 1; i >= 0; i -= 1) {
-      const s = strengthCandidates[i];
+    for (let i = state.strengthCandidates.length - 1; i >= 0; i -= 1) {
+      const s = state.strengthCandidates[i];
       if (s.kind === 'simple' && (s.unit === 'г' || s.unit === 'л')) {
-        volumeCandidates.push(
+        state.addVolume(
           buildMeasurementNode(
             { value: String(s.value), normalizedValue: null },
             { normalizedValue: s.unit },
@@ -416,9 +356,9 @@ function parseMedicineQuery(rawQuery) {
           ),
         );
         for (let ci = s.startIndex; ci <= s.endIndex; ci += 1) {
-          tokenRoles.set(ci, 'volume');
+          state.setRole(ci, 'volume');
         }
-        strengthCandidates.splice(i, 1);
+        state.removeStrength(i);
       }
     }
   }
@@ -426,27 +366,27 @@ function parseMedicineQuery(rawQuery) {
   // Infer injection form when a dose-unit/mL ratio strength is present and no
   // explicit injection form was found (e.g. bare р-р with 300 ед/1.5 мл).
   const DOSE_UNITS = new Set(['ед', 'ме']);
-  const hasDoseRatioPerMl = strengthCandidates.some(
+  const hasDoseRatioPerMl = state.strengthCandidates.some(
     (s) => s.kind === 'ratio' && DOSE_UNITS.has(s.unit) && s.denominator?.unit === 'мл',
   );
-  if (hasDoseRatioPerMl && dosageForm !== 'injection') {
-    dosageForm = 'injection';
-    dosageFormSource = 'inferred_from_strength';
+  if (hasDoseRatioPerMl && state.dosageForm !== 'injection') {
+    state.dosageForm = 'injection';
+    state.dosageFormSource = 'inferred_from_strength';
   }
 
-  dropCandidatesMatching(volumeCandidates, tokenRoles, (v) =>
+  state.dropCandidates('volume', (v) =>
     isSolventVolumeCandidate(v, tokens),
   );
 
   const solventClauseStartIndex = findSolventClauseStartIndex(tokens);
   if (solventClauseStartIndex != null) {
     const isAfterSolventClause = (c) => (c.startIndex ?? 0) >= solventClauseStartIndex;
-    dropCandidatesMatching(strengthCandidates, tokenRoles, isAfterSolventClause);
-    dropCandidatesMatching(volumeCandidates, tokenRoles, isAfterSolventClause);
+    state.dropCandidates('strength', isAfterSolventClause);
+    state.dropCandidates('volume', isAfterSolventClause);
 
     for (let index = solventClauseStartIndex; index < tokens.length; index += 1) {
-      consumedIndexes.add(index);
-      if (!tokenRoles.has(index)) tokenRoles.set(index, 'solvent');
+      state.consume(index);
+      if (!state.tokenRoles.has(index)) state.setRole(index, 'solvent');
     }
   }
 
@@ -454,35 +394,41 @@ function parseMedicineQuery(rawQuery) {
   // "4000 МЕ 0.4 мл предварительно заполненные шприцы" → "4000 МЕ/0.4 мл".
   // Keep the generic concentration inference below for insulin-style listings:
   // "100 ед" + "3 мл" → "100 ед/мл" + "3 мл".
-  const hasVolumeMl = volumeCandidates.some((v) => v.unit === 'мл');
+  const hasVolumeMl = state.volumeCandidates.some((v) => v.unit === 'мл');
   const prefilledSyringeSignal = hasPrefilledSyringeSignal(rawQuery, normalizedText);
   const prefilledSyringeMlVolumes = prefilledSyringeSignal
-    ? volumeCandidates.filter((v) => v.unit === 'мл' && v.value != null)
+    ? state.volumeCandidates.filter((v) => v.unit === 'мл' && v.value != null)
     : [];
   if (prefilledSyringeMlVolumes.length === 1) {
     const syringeVolume = prefilledSyringeMlVolumes[0];
-    for (let i = 0; i < strengthCandidates.length; i += 1) {
-      const s = strengthCandidates[i];
+    for (let i = 0; i < state.strengthCandidates.length; i += 1) {
+      const s = state.strengthCandidates[i];
       if (s.kind === 'simple' && DOSE_UNITS.has(s.unit)) {
-        strengthCandidates[i] = buildRatioStrengthNode(
-          s.values,
-          s.unit,
-          { value: syringeVolume.value, unit: 'мл' },
-          s.startIndex,
-          syringeVolume.endIndex,
+        state.replaceStrength(
+          i,
+          buildRatioStrengthNode(
+            s.values,
+            s.unit,
+            { value: syringeVolume.value, unit: 'мл' },
+            s.startIndex,
+            syringeVolume.endIndex,
+          ),
         );
       }
     }
   } else if (hasVolumeMl) {
-    for (let i = 0; i < strengthCandidates.length; i += 1) {
-      const s = strengthCandidates[i];
+    for (let i = 0; i < state.strengthCandidates.length; i += 1) {
+      const s = state.strengthCandidates[i];
       if (s.kind === 'simple' && DOSE_UNITS.has(s.unit)) {
-        strengthCandidates[i] = buildRatioStrengthNode(
-          s.values,
-          s.unit,
-          { value: null, unit: 'мл' },
-          s.startIndex,
-          s.endIndex,
+        state.replaceStrength(
+          i,
+          buildRatioStrengthNode(
+            s.values,
+            s.unit,
+            { value: null, unit: 'мл' },
+            s.startIndex,
+            s.endIndex,
+          ),
         );
       }
     }
@@ -493,8 +439,8 @@ function parseMedicineQuery(rawQuery) {
   // "200 доз". The explicit "по" is the disambiguating signal — without it,
   // bare "X mass + Y доз" stays simple (e.g. Паллада-НС "665 мкг, 30 мл (240 доз)").
   const MASS_STRENGTH_UNITS = new Set(['мкг', 'мг', 'г']);
-  for (let i = 0; i < strengthCandidates.length; i += 1) {
-    const s = strengthCandidates[i];
+  for (let i = 0; i < state.strengthCandidates.length; i += 1) {
+    const s = state.strengthCandidates[i];
     if (s.kind !== 'simple' || !MASS_STRENGTH_UNITS.has(s.unit)) continue;
 
     const connector = tokens[s.endIndex + 1];
@@ -508,19 +454,22 @@ function parseMedicineQuery(rawQuery) {
       denominatorUnit?.type === 'UNIT' &&
       denominatorUnit.normalizedValue === 'доз'
     ) {
-      strengthCandidates[i] = buildRatioStrengthNode(
-        s.values,
-        s.unit,
-        { value: null, unit: 'доз' },
-        s.startIndex,
-        s.endIndex,
+      state.replaceStrength(
+        i,
+        buildRatioStrengthNode(
+          s.values,
+          s.unit,
+          { value: null, unit: 'доз' },
+          s.startIndex,
+          s.endIndex,
+        ),
       );
     }
   }
 
   const tradeNameEntries = [];
   for (let index = 0; index < tokens.length; index += 1) {
-    if (consumedIndexes.has(index)) continue;
+    if (state.hasConsumed(index)) continue;
 
     const token = tokens[index];
     if (token.type === 'WORD') {
@@ -536,9 +485,9 @@ function parseMedicineQuery(rawQuery) {
     if (token.type === 'CONTAINER' || token.type === 'DOSAGE_FORM') continue;
 
     if (token.type === 'NUMBER') {
-      if (isDuplicateTotalStrengthMarker(tokens, index, strengthCandidates)) {
-        tokenRoles.set(index, 'strength');
-      } else if (shouldKeepNumberAsBrandToken(tokens, index, consumedIndexes)) {
+      if (isDuplicateTotalStrengthMarker(tokens, index, state.strengthCandidates)) {
+        state.setRole(index, 'strength');
+      } else if (shouldKeepNumberAsBrandToken(tokens, index, state.consumedIndexes)) {
         tradeNameEntries.push({ index, value: token.value, isTradeName: true });
       }
     }
@@ -551,10 +500,10 @@ function parseMedicineQuery(rawQuery) {
   for (const entry of tradeNameEntries) {
     if (entry.isTradeName) {
       residueTokens.push(entry.value);
-      tokenRoles.set(entry.index, 'trade_name');
+      state.setRole(entry.index, 'trade_name');
     } else if (tradeNameIndexes.has(entry.index - 1) || tradeNameIndexes.has(entry.index + 1)) {
       residueTokens.push(entry.value);
-      tokenRoles.set(entry.index, 'trade_name');
+      state.setRole(entry.index, 'trade_name');
     }
   }
 
@@ -584,10 +533,10 @@ function parseMedicineQuery(rawQuery) {
     ? tradeNameResidueTokens.filter((token) => !removableAnnotationNoiseTokens.has(token))
     : tradeNameResidueTokens;
   if (removableAnnotationNoiseTokens.size) {
-    for (const [tokenIndex, role] of tokenRoles) {
+    for (const [tokenIndex, role] of state.tokenRoles) {
       if (role !== 'trade_name') continue;
       const value = tokens[tokenIndex]?.normalizedValue;
-      if (value && removableAnnotationNoiseTokens.has(value)) tokenRoles.delete(tokenIndex);
+      if (value && removableAnnotationNoiseTokens.has(value)) state.clearRole(tokenIndex);
     }
   }
   const cyrillicTokenSet = new Set(filteredResidueTokens.filter((t) => /[\u0400-\u04ff]/u.test(t)));
@@ -600,92 +549,57 @@ function parseMedicineQuery(rawQuery) {
     .map((token) => normalizeTradeNameAbbrevToken(token));
 
   maybeInferVitaminDStrength({
-    tokens,
-    consumedIndexes,
-    tokenRoles,
+    state,
     tradeNameTokens,
-    packCount,
-    strengthCandidates,
   });
 
   maybeInferEnzymeActivityStrength({
-    tokens,
-    consumedIndexes,
-    tokenRoles,
+    state,
     tradeNameTokens,
-    packCount,
-    strengthCandidates,
   });
 
   maybeInferOralSolidStrength({
-    tokens,
-    dosageForm,
-    consumedIndexes,
-    tokenRoles,
+    state,
     tradeNameTokens,
-    packCount,
-    strengthCandidates,
   });
   const inferredTrailingPackCount = maybeInferTrailingOralSolidPackCount({
-    tokens,
-    dosageForm,
-    consumedIndexes,
-    tokenRoles,
+    state,
     tradeNameTokens,
-    strengthCandidates,
-    packCount,
   });
   if (inferredTrailingPackCount != null) {
-    packCount = inferredTrailingPackCount;
+    state.setPackCount(inferredTrailingPackCount);
   }
 
   maybeInferOralLiquidSpacedDoseRatio({
-    dosageForm,
-    strengthCandidates,
-    volumeCandidates,
-    tokenRoles,
+    state,
   });
 
   const dosageFormRoute =
     detectDosageFormRoute(rawQuery)
-    || inferOralRouteFromLiquidDose(dosageForm, strengthCandidates);
+    || inferOralRouteFromLiquidDose(state.dosageForm, state.strengthCandidates);
 
   maybeInferPowderMilligramStrength({
-    tokens,
-    dosageForm,
+    state,
     dosageFormRoute,
-    consumedIndexes,
-    tokenRoles,
     tradeNameTokens,
-    packCount,
-    strengthCandidates,
   });
 
   maybeInferPowderGramStrength({
-    tokens,
-    dosageForm,
-    consumedIndexes,
-    tokenRoles,
+    state,
     tradeNameTokens,
-    packCount,
-    strengthCandidates,
   });
 
   maybeInferLiquidPackageVolume({
-    tokens,
-    dosageForm,
-    consumedIndexes,
-    tokenRoles,
-    volumeCandidates,
+    state,
   });
 
   if (
-    packCount == null &&
-    strengthCandidates.length === 0 &&
-    volumeCandidates.some((volume) => volume.unit === 'мл') &&
+    state.packCount == null &&
+    state.strengthCandidates.length === 0 &&
+    state.volumeCandidates.some((volume) => volume.unit === 'мл') &&
     hasPrefilledSyringeSignal(rawQuery, normalizedText)
   ) {
-    packCount = 1;
+    state.setPackCount(1);
   }
 
   // For infusion bags, injection ampoules, or injectable-looking vials written as a bare ratio
@@ -696,18 +610,18 @@ function parseMedicineQuery(rawQuery) {
   const isInjectableContext =
     dosageFormRoute === 'infusion' ||
     dosageFormRoute === 'injection' ||
-    dosageForm === 'injection' ||
-    dosageForm === 'infusion' ||
-    (dosageForm === 'solution' &&
-      dosageFormSource === 'inferred_from_container' &&
-      containerType === 'vial');
-  if (isInjectableContext && volumeCandidates.length === 0) {
-    for (const strength of strengthCandidates) {
+    state.dosageForm === 'injection' ||
+    state.dosageForm === 'infusion' ||
+    (state.dosageForm === 'solution' &&
+      state.dosageFormSource === 'inferred_from_container' &&
+      state.containerType === 'vial');
+  if (isInjectableContext && state.volumeCandidates.length === 0) {
+    for (const strength of state.strengthCandidates) {
       if (strength.kind !== 'ratio') continue;
       const denominator = strength.denominator;
       if (denominator?.value == null) continue;
       if (UNIT_FAMILY_BY_VALUE.get(denominator.unit) !== 'volume') continue;
-      volumeCandidates.push({
+      state.addVolume({
         text: `${denominator.value} ${denominator.unit}`,
         value: denominator.value,
         unit: denominator.unit,
@@ -717,14 +631,18 @@ function parseMedicineQuery(rawQuery) {
     }
   }
 
-  let strengths = dedupePublicNodes(strengthCandidates.map(toPublicStrengthNode).filter(Boolean));
+  let strengths = dedupePublicNodes(
+    state.strengthCandidates.map(toPublicStrengthNode).filter(Boolean),
+  );
   strengths = mergeSameUnitSlashStrength(strengths, normalizedText);
-  strengths = inferInhalationPerDoseStrengths(strengths, normalizedText, dosageForm);
-  let volumes = dedupePublicNodes(volumeCandidates.map(toPublicMeasurementNode).filter(Boolean));
-  ({ strengths, volumes } = simplifyInhalationDoseRatios(strengths, volumes, dosageForm));
+  strengths = inferInhalationPerDoseStrengths(strengths, normalizedText, state.dosageForm);
+  let volumes = dedupePublicNodes(
+    state.volumeCandidates.map(toPublicMeasurementNode).filter(Boolean),
+  );
+  ({ strengths, volumes } = simplifyInhalationDoseRatios(strengths, volumes, state.dosageForm));
   volumes = dedupePublicNodes(volumes);
   const productType = classifyProductType(rawQuery, normalizedText, {
-    dosageForm,
+    dosageForm: state.dosageForm,
     strengths,
     volumes,
   });
@@ -734,16 +652,13 @@ function parseMedicineQuery(rawQuery) {
   }
   const tradeNameText = tradeNameTokens.join(' ').trim() || null;
 
-  const annotatedTokens = tokens.map((token, index) => ({
-    ...token,
-    role: tokenRoles.get(index) || null,
-  }));
+  const annotatedTokens = state.annotatedTokens();
 
   if (isBrandOnlyProductType(productType)) {
     // Strip pack-count multipliers (e.g. "3x10", "1x1") from the full trade name text
     let fullTradeName = normalizedText || null;
     if (fullTradeName) {
-      for (const [idx, role] of tokenRoles) {
+      for (const [idx, role] of state.tokenRoles) {
         if (role === 'pack' && tokens[idx]?.type === 'COUNT_MULTIPLIER') {
           const v = tokens[idx].normalizedValue || tokens[idx].value;
           if (v) fullTradeName = fullTradeName.replace(v, '').replace(/\s+/gu, ' ').trim();
@@ -773,7 +688,7 @@ function parseMedicineQuery(rawQuery) {
         vendor_country_tokens: vendorCountryTokens,
         strengths: [],
         volumes: [],
-        pack_count: packCount,
+        pack_count: state.packCount,
       },
     };
   }
@@ -786,17 +701,17 @@ function parseMedicineQuery(rawQuery) {
     attributes: {
       trade_name_text: tradeNameText,
       trade_name_tokens: tradeNameTokens.map((token) => normalizeTradeNameAbbrevToken(token)),
-      dosage_form: dosageForm || null,
-      dosage_form_token: dosageFormToken?.normalizedValue || null,
-      dosage_form_source: dosageFormSource,
+      dosage_form: state.dosageForm || null,
+      dosage_form_token: state.dosageFormToken?.normalizedValue || null,
+      dosage_form_source: state.dosageFormSource,
       dosage_form_route: dosageFormRoute,
-      container_type: containerType,
+      container_type: state.containerType,
       product_type: productType,
       vendor_country_text: vendorCountry,
       vendor_country_tokens: vendorCountryTokens,
       strengths,
       volumes,
-      pack_count: packCount,
+      pack_count: state.packCount,
     },
   };
 }

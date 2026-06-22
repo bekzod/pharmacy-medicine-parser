@@ -39,12 +39,8 @@ function inferOralRouteFromLiquidDose(dosageForm, strengthCandidates) {
 
 const MASS_UNITS_FOR_DOSE_INFERENCE = new Set(['мкг', 'мг', 'г']);
 
-function maybeInferOralLiquidSpacedDoseRatio({
-  dosageForm,
-  strengthCandidates,
-  volumeCandidates,
-  tokenRoles,
-}) {
+function maybeInferOralLiquidSpacedDoseRatio({ state }) {
+  const { dosageForm, strengthCandidates, volumeCandidates } = state;
   if (!ORAL_LIQUID_DOSAGE_FORMS.has(dosageForm)) return;
 
   for (let strengthIndex = 0; strengthIndex < strengthCandidates.length; strengthIndex += 1) {
@@ -61,18 +57,21 @@ function maybeInferOralLiquidSpacedDoseRatio({
     if (volumeIndex === -1) continue;
 
     const denominatorVolume = volumeCandidates[volumeIndex];
-    strengthCandidates[strengthIndex] = buildRatioStrengthNode(
-      strength.values,
-      strength.unit,
-      { value: denominatorVolume.value, unit: denominatorVolume.unit },
-      strength.startIndex,
-      denominatorVolume.endIndex,
+    state.replaceStrength(
+      strengthIndex,
+      buildRatioStrengthNode(
+        strength.values,
+        strength.unit,
+        { value: denominatorVolume.value, unit: denominatorVolume.unit },
+        strength.startIndex,
+        denominatorVolume.endIndex,
+      ),
     );
 
     for (let index = denominatorVolume.startIndex; index <= denominatorVolume.endIndex; index += 1) {
-      tokenRoles.set(index, 'strength');
+      state.setRole(index, 'strength');
     }
-    volumeCandidates.splice(volumeIndex, 1);
+    state.removeVolume(volumeIndex);
   }
 }
 
@@ -123,15 +122,9 @@ function isVitaminDTradeNameToken(token) {
   return ['д-3', 'д3', 'd-3', 'd3'].includes(String(token || '').toLowerCase());
 }
 
-function maybeInferVitaminDStrength({
-  tokens,
-  consumedIndexes,
-  tokenRoles,
-  tradeNameTokens,
-  packCount,
-  strengthCandidates,
-}) {
-  if (strengthCandidates.length > 0) return;
+function maybeInferVitaminDStrength({ state, tradeNameTokens }) {
+  const { tokens } = state;
+  if (state.strengthCandidates.length > 0) return;
 
   const normalizedTradeTokens = (tradeNameTokens || []).map((token) =>
     String(token || '').toLowerCase(),
@@ -145,12 +138,12 @@ function maybeInferVitaminDStrength({
   const candidateIndexes = [];
 
   for (let index = 0; index < tokens.length; index += 1) {
-    if (consumedIndexes.has(index)) continue;
+    if (state.hasConsumed(index)) continue;
 
     const token = tokens[index];
     if (token?.type !== 'NUMBER') continue;
     if (!Number.isFinite(token.numericValue) || token.numericValue <= 0) continue;
-    if (packCount != null && token.numericValue === packCount) continue;
+    if (state.packCount != null && token.numericValue === state.packCount) continue;
 
     candidateIndexes.push(index);
   }
@@ -168,18 +161,17 @@ function maybeInferVitaminDStrength({
     strengthIndex,
     strengthIndex,
   );
-  strengthCandidates.push(strengthNode);
-  consumedIndexes.add(strengthIndex);
-  tokenRoles.set(strengthIndex, 'strength');
+  state.addStrength(strengthNode);
+  state.consume(strengthIndex, 'strength');
 
   if (
-    packCount != null &&
+    state.packCount != null &&
     candidateIndexes.length >= 2 &&
     candidateIndexes[0] !== strengthIndex &&
     tokens[candidateIndexes[0]].numericValue < 10 &&
     tokens[candidateIndexes[0] + 1]?.type === 'DOSAGE_FORM'
   ) {
-    tokenRoles.set(candidateIndexes[0], 'trade_name');
+    state.setRole(candidateIndexes[0], 'trade_name');
   }
 }
 
@@ -215,21 +207,15 @@ const ENZYME_ACTIVITY_TRADE_TOKENS = new Set([
   'эрмиталь',
 ]);
 
-function maybeInferEnzymeActivityStrength({
-  tokens,
-  consumedIndexes,
-  tokenRoles,
-  tradeNameTokens,
-  strengthCandidates,
-  packCount,
-}) {
-  if (strengthCandidates.length > 0) return;
+function maybeInferEnzymeActivityStrength({ state, tradeNameTokens }) {
+  const { tokens } = state;
+  if (state.strengthCandidates.length > 0) return;
 
   if (!tradeNameTokensInclude(tradeNameTokens, ENZYME_ACTIVITY_TRADE_TOKENS)) return;
 
   const strengthIndex = findSoleNumericCandidate(tokens, {
-    consumedIndexes,
-    packCount,
+    consumedIndexes: state.consumedIndexes,
+    packCount: state.packCount,
     min: 10000,
     max: 100000,
   });
@@ -241,9 +227,8 @@ function maybeInferEnzymeActivityStrength({
     strengthIndex,
     strengthIndex,
   );
-  strengthCandidates.push(strengthNode);
-  consumedIndexes.add(strengthIndex);
-  tokenRoles.set(strengthIndex, 'strength');
+  state.addStrength(strengthNode);
+  state.consume(strengthIndex, 'strength');
 }
 
 // Oral solid forms (tablet, capsule, etc.) where pharmacy listings often
@@ -294,18 +279,11 @@ function dropPromotedTradeNameValues(tradeNameTokens, values) {
   }
 }
 
-function maybeInferOralSolidStrength({
-  tokens,
-  dosageForm,
-  consumedIndexes,
-  tokenRoles,
-  tradeNameTokens,
-  packCount,
-  strengthCandidates,
-}) {
+function maybeInferOralSolidStrength({ state, tradeNameTokens }) {
+  const { tokens, dosageForm } = state;
   const hasKnownOralSolidTrade =
     !dosageForm &&
-    packCount != null &&
+    state.packCount != null &&
     (tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_SLASH_IMPLICIT_MG) ||
       tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_MG) ||
       tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_G) ||
@@ -317,12 +295,12 @@ function maybeInferOralSolidStrength({
   ) {
     return;
   }
-  if (strengthCandidates.length > 0) return;
+  if (state.strengthCandidates.length > 0) return;
 
   if (tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_SLASH_IMPLICIT_MG)) {
     const slashSequences = [];
     for (let index = 0; index < tokens.length; index += 1) {
-      if (consumedIndexes.has(index) || tokens[index]?.type !== 'NUMBER') continue;
+      if (state.hasConsumed(index) || tokens[index]?.type !== 'NUMBER') continue;
       const sequence = collectNumericSequence(tokens, index);
       if (!sequence || sequence.values.length < 2) continue;
       if (sequence.values.some((value) => value < 1 || value > 5000)) continue;
@@ -338,10 +316,9 @@ function maybeInferOralSolidStrength({
         sequence.index,
         sequence.nextIndex - 1,
       );
-      strengthCandidates.push(strengthNode);
+      state.addStrength(strengthNode);
       for (let index = sequence.index; index < sequence.nextIndex; index += 1) {
-        consumedIndexes.add(index);
-        tokenRoles.set(index, 'strength');
+        state.consume(index, 'strength');
       }
       dropPromotedTradeNameValues(tradeNameTokens, sequence.values);
       return;
@@ -361,8 +338,8 @@ function maybeInferOralSolidStrength({
     ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG,
   );
   const strengthIndex = findSoleNumericCandidate(tokens, {
-    consumedIndexes,
-    packCount,
+    consumedIndexes: state.consumedIndexes,
+    packCount: state.packCount,
     min: allowGramStrength ? 0.01 : allowLowStrength ? 1 : 25,
     max: 5000,
     requireInteger: !(allowGramStrength || allowLowStrength),
@@ -383,31 +360,23 @@ function maybeInferOralSolidStrength({
     strengthIndex,
     strengthIndex,
   );
-  strengthCandidates.push(strengthNode);
-  consumedIndexes.add(strengthIndex);
-  tokenRoles.set(strengthIndex, 'strength');
+  state.addStrength(strengthNode);
+  state.consume(strengthIndex, 'strength');
 
   // Trade-name tokens were collected from residue earlier — drop the just-
   // promoted strength value so it doesn't appear in both fields.
   dropPromotedTradeNameValues(tradeNameTokens, [tokens[strengthIndex].value]);
 }
 
-function maybeInferTrailingOralSolidPackCount({
-  tokens,
-  dosageForm,
-  consumedIndexes,
-  tokenRoles,
-  tradeNameTokens,
-  strengthCandidates,
-  packCount,
-}) {
-  if (packCount != null) return null;
+function maybeInferTrailingOralSolidPackCount({ state, tradeNameTokens }) {
+  const { tokens, dosageForm } = state;
+  if (state.packCount != null) return null;
   if (!ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(dosageForm)) return null;
-  if (!strengthCandidates.length) return null;
+  if (!state.strengthCandidates.length) return null;
 
   const candidateIndexes = [];
   for (let index = 0; index < tokens.length; index += 1) {
-    if (consumedIndexes.has(index)) continue;
+    if (state.hasConsumed(index)) continue;
     const token = tokens[index];
     if (token?.type !== 'NUMBER') continue;
     if (!Number.isFinite(token.numericValue) || !Number.isInteger(token.numericValue)) continue;
@@ -419,37 +388,31 @@ function maybeInferTrailingOralSolidPackCount({
   const packIndex = candidateIndexes[0];
   let hasStrengthBefore = false;
   for (let index = 0; index < packIndex; index += 1) {
-    if (tokenRoles.get(index) === 'strength') {
+    if (state.tokenRoles.get(index) === 'strength') {
       hasStrengthBefore = true;
       break;
     }
   }
   if (!hasStrengthBefore) return null;
 
-  consumedIndexes.add(packIndex);
-  tokenRoles.set(packIndex, 'pack');
+  state.consume(packIndex, 'pack');
   dropPromotedTradeNameValues(tradeNameTokens, [tokens[packIndex].value]);
   return tokens[packIndex].numericValue;
 }
 
-function maybeInferLiquidPackageVolume({
-  tokens,
-  dosageForm,
-  consumedIndexes,
-  tokenRoles,
-  volumeCandidates,
-}) {
+function maybeInferLiquidPackageVolume({ state }) {
+  const { tokens, dosageForm, volumeCandidates } = state;
   if (!LIQUID_FORMS_WITH_IMPLICIT_ML_VOLUME.has(dosageForm)) return;
   if (volumeCandidates.length > 0) return;
 
   const volumeIndex = findSoleNumericCandidate(tokens, {
-    consumedIndexes,
+    consumedIndexes: state.consumedIndexes,
     min: 10,
     max: 1000,
   });
   if (volumeIndex == null) return;
 
-  volumeCandidates.push(
+  state.addVolume(
     buildMeasurementNode(
       { value: tokens[volumeIndex].value, normalizedValue: null },
       { normalizedValue: 'мл' },
@@ -457,31 +420,23 @@ function maybeInferLiquidPackageVolume({
       volumeIndex,
     ),
   );
-  consumedIndexes.add(volumeIndex);
-  tokenRoles.set(volumeIndex, 'volume');
+  state.consume(volumeIndex, 'volume');
 }
 
-function maybeInferPowderGramStrength({
-  tokens,
-  dosageForm,
-  consumedIndexes,
-  tokenRoles,
-  tradeNameTokens,
-  packCount,
-  strengthCandidates,
-}) {
+function maybeInferPowderGramStrength({ state, tradeNameTokens }) {
+  const { tokens, dosageForm } = state;
   if (dosageForm !== 'powder') return;
-  if (strengthCandidates.length > 0) return;
-  if (packCount == null) return;
+  if (state.strengthCandidates.length > 0) return;
+  if (state.packCount == null) return;
 
   const candidateIndexes = [];
   for (let index = 0; index < tokens.length; index += 1) {
-    if (consumedIndexes.has(index)) continue;
+    if (state.hasConsumed(index)) continue;
     const token = tokens[index];
     if (token?.type !== 'NUMBER') continue;
     if (!Number.isFinite(token.numericValue)) continue;
     if (token.numericValue <= 0 || token.numericValue > 10) continue;
-    if (packCount != null && token.numericValue === packCount) continue;
+    if (state.packCount != null && token.numericValue === state.packCount) continue;
     candidateIndexes.push(index);
   }
 
@@ -494,33 +449,28 @@ function maybeInferPowderGramStrength({
     strengthIndex,
     strengthIndex,
   );
-  strengthCandidates.push(strengthNode);
-  consumedIndexes.add(strengthIndex);
-  tokenRoles.set(strengthIndex, 'strength');
+  state.addStrength(strengthNode);
+  state.consume(strengthIndex, 'strength');
   dropPromotedTradeNameValues(tradeNameTokens, [tokens[strengthIndex].value]);
 }
 
 function maybeInferPowderMilligramStrength({
-  tokens,
-  dosageForm,
+  state,
   dosageFormRoute,
-  consumedIndexes,
-  tokenRoles,
   tradeNameTokens,
-  packCount,
-  strengthCandidates,
 }) {
+  const { tokens, dosageForm } = state;
   if (dosageForm !== 'powder') return;
-  if (strengthCandidates.length > 0) return;
-  if (packCount == null) return;
+  if (state.strengthCandidates.length > 0) return;
+  if (state.packCount == null) return;
   const isInjectionPowder = dosageFormRoute === 'injection' || dosageFormRoute === 'infusion';
   if (!isInjectionPowder && !tradeNameTokensInclude(tradeNameTokens, POWDER_TRADES_WITH_IMPLICIT_MG)) {
     return;
   }
 
   const strengthIndex = findSoleNumericCandidate(tokens, {
-    consumedIndexes,
-    packCount,
+    consumedIndexes: state.consumedIndexes,
+    packCount: state.packCount,
     min: 25,
     max: 5000,
   });
@@ -532,9 +482,8 @@ function maybeInferPowderMilligramStrength({
     strengthIndex,
     strengthIndex,
   );
-  strengthCandidates.push(strengthNode);
-  consumedIndexes.add(strengthIndex);
-  tokenRoles.set(strengthIndex, 'strength');
+  state.addStrength(strengthNode);
+  state.consume(strengthIndex, 'strength');
   dropPromotedTradeNameValues(tradeNameTokens, [tokens[strengthIndex].value]);
 }
 
@@ -566,17 +515,6 @@ const SOLVENT_LOOKBACK_TOKENS = 8;
 
 function lowerToken(token) {
   return String(token?.value || '').toLowerCase().replace(/ё/g, 'е');
-}
-
-function dropCandidatesMatching(candidates, tokenRoles, predicate) {
-  for (let i = candidates.length - 1; i >= 0; i -= 1) {
-    const candidate = candidates[i];
-    if (!predicate(candidate)) continue;
-    for (let ci = candidate.startIndex; ci <= candidate.endIndex; ci += 1) {
-      tokenRoles.delete(ci);
-    }
-    candidates.splice(i, 1);
-  }
 }
 
 function hasTokenWithPrefixInRange(tokens, prefixRe, fromIndex, toIndex) {
@@ -636,7 +574,6 @@ module.exports = {
   hasRepeatedStrengthNumberLater,
   hasPrefilledSyringeSignal,
   lowerToken,
-  dropCandidatesMatching,
   hasTokenWithPrefixInRange,
   isSolventVolumeCandidate,
   findSolventClauseStartIndex,
