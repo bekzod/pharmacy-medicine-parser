@@ -431,6 +431,23 @@ const measurementAndRouteCases = [
   volumes: [ { text: '100 мл', value: 100, unit: 'мл' } ],
   pack_count: 1
 }],
+  ['infers omitted per-ml unit for infusion concentrates', 'альвиум конц.д/приг.р-ра д/инф.1мг 5мл №10', {
+  trade_name_text: 'альвиум',
+  dosage_form: 'solution',
+  dosage_form_route: 'infusion',
+  strengths: [
+    {
+      kind: 'ratio',
+      text: '1 мг/мл',
+      values: [ 1 ],
+      value: 1,
+      unit: 'мг',
+      denominator: { value: null, unit: 'мл' }
+    }
+  ],
+  volumes: [ { text: '5 мл', value: 5, unit: 'мл' } ],
+  pack_count: 10
+}],
   ['parses compact solution-form strength followed by package volume', 'Элькар р-р300мг/мл100мл№1', {
   trade_name_text: 'элькар',
   dosage_form: 'solution',

@@ -49,6 +49,7 @@ const {
   maybeInferOralSolidStrength,
   maybeInferPowderGramStrength,
   maybeInferPowderMilligramStrength,
+  maybeInferConcentratePerMlStrength,
   maybeInferTrailingOralSolidPackCount,
   maybeInferVitaminDStrength,
 } = require('./inference');
@@ -587,6 +588,12 @@ function parseMedicineQuery(rawQuery) {
   maybeInferPowderGramStrength({
     state,
     tradeNameTokens,
+  });
+
+  maybeInferConcentratePerMlStrength({
+    state,
+    rawQuery,
+    dosageFormRoute,
   });
 
   maybeInferLiquidPackageVolume({

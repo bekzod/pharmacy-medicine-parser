@@ -179,6 +179,7 @@ function buildStrengthSearchTexts(strengths) {
   for (const strength of strengths) {
     if (!strength?.text) continue;
     values.add(strength.text);
+    addDoseUnitAliasStrengthTexts(values, strength);
     addSameUnitMultiValueStrengthTexts(values, strength);
 
     if (strength.kind === 'combination') {
@@ -195,10 +196,42 @@ function buildStrengthSearchTexts(strengths) {
           ? `${String(strength.value)}%`
           : `${String(strength.value)} ${strength.unit}`,
       );
+      addDoseUnitAliasStrengthTexts(values, strength);
     }
   }
 
   return [...values];
+}
+
+function doseUnitAliases(unit) {
+  const normalized = String(unit || '').toLowerCase();
+  if (normalized === 'ед') return ['ме'];
+  if (normalized === 'ме') return ['ед'];
+  if (normalized === 'iu') return ['ме', 'ед'];
+  return [];
+}
+
+function addDoseUnitAliasStrengthTexts(values, strength) {
+  if (!strength || strength.value == null || !strength.unit) return;
+  const numericValue = Number(strength.value);
+  if (!Number.isFinite(numericValue)) return;
+  const aliases = doseUnitAliases(strength.unit);
+  if (!aliases.length) return;
+  const formattedValue = formatMeasurementNumber(numericValue);
+  if (!formattedValue) return;
+
+  for (const alias of aliases) {
+    if (strength.kind === 'ratio' && strength.denominator?.unit) {
+      const denominator = strength.denominator;
+      const denominatorText =
+        denominator.value == null
+          ? denominator.unit
+          : `${formatMeasurementNumber(denominator.value)} ${denominator.unit}`;
+      values.add(`${formattedValue} ${alias}/${denominatorText}`);
+    } else {
+      values.add(`${formattedValue} ${alias}`);
+    }
+  }
 }
 
 function addSameUnitComponentTextVariants(
@@ -258,6 +291,7 @@ function buildStrictStrengthSearchTexts(strengths, volumes = []) {
 
   for (const strength of validStrengths) {
     values.add(strength.text);
+    addDoseUnitAliasStrengthTexts(values, strength);
     addSameUnitMultiValueStrengthTexts(values, strength);
     addRatioEquivalentStrengthTexts(values, strength, volumes);
 
