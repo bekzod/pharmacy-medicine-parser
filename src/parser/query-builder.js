@@ -1,11 +1,15 @@
-const { escapeLikePattern } = require('../medicine-lookup-common');
+const {
+  buildLikeAnyCondition,
+  buildLikeAnyPredicates,
+  escapeLikePattern,
+} = require('../medicine-lookup-common');
+const { isBrandOnlyProductType } = require('./product-type');
 
 const BRAND_CANDIDATE_LIMIT_SINGLE = 50;
 const BRAND_CANDIDATE_LIMIT_MIN = 200;
 const BRAND_CANDIDATE_LIMIT_MAX = 250;
 const BRAND_CANDIDATE_LIMIT_MULTIPLIER = 25;
 const TRADE_NAME_TOKEN_LIMIT = 8;
-const BRAND_ONLY_PRODUCT_TYPES = new Set(['device', 'other']);
 const PACK_ONE_NULL_COMPATIBLE_DOSAGE_FORMS = new Set([
   'syrup',
   'solution',
@@ -68,16 +72,6 @@ function appendReplacementsWithVariants(
   });
 
   return keys;
-}
-
-function buildLikeAnyPredicates(expressions, keys) {
-  return expressions.flatMap((expression) =>
-    keys.map((key) => `${expression} LIKE '%' || :${key} || '%' ESCAPE '\\'`),
-  );
-}
-
-function buildLikeAnyCondition(expressions, keys) {
-  return `(${buildLikeAnyPredicates(expressions, keys).join(' OR ')})`;
 }
 
 function buildExactAnyPredicates(expressions, keys) {
@@ -341,10 +335,6 @@ function buildStrictVolumeSearchTexts(volumes, strengths) {
         ),
     ),
   );
-}
-
-function isBrandOnlyProductType(productType) {
-  return BRAND_ONLY_PRODUCT_TYPES.has(productType);
 }
 
 function allowsDeviceStoredProductTypeFallback(attributes) {

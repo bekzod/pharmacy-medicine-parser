@@ -1,21 +1,10 @@
 const { parseMedicineQuery } = require('./parser');
-const fuzzySearch = require('./medicine-fuzzy-search');
-
-const buildQueryVariants = fuzzySearch.buildQueryVariants;
-const transliterateLatinToCyrillic =
-  typeof fuzzySearch.transliterateLatinToCyrillic === 'function'
-    ? fuzzySearch.transliterateLatinToCyrillic
-    : (value) => value;
-const normalizeQuery =
-  typeof fuzzySearch.normalizeQuery === 'function'
-    ? fuzzySearch.normalizeQuery
-    : (value) =>
-        String(value || '')
-          .toLowerCase()
-          .replace(/ё/g, 'е')
-          .replace(/[^\p{L}\p{N}]+/gu, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
+const { isBrandOnlyProductType } = require('./parser/product-type');
+const {
+  buildQueryVariants,
+  normalizeQuery,
+  transliterateLatinToCyrillic,
+} = require('./medicine-fuzzy-search');
 
 const VOLUME_LIKE_UNITS = new Set(['мл', 'л', 'г']);
 const CONTAINER_TOKEN_RE =
@@ -134,10 +123,6 @@ function dosageFormPriority(source) {
 
 function hasExplicitContainerHint(text) {
   return CONTAINER_TOKEN_RE.test(String(text || '').toLowerCase());
-}
-
-function isBrandOnlyProductType(productType) {
-  return productType === 'device' || productType === 'other';
 }
 
 function applyAttributeOverrides(parsed, overrides) {

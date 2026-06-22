@@ -7,25 +7,12 @@ const {
   MEDICINE_UNIT_TOKENS,
   normalizeMedicineToken,
 } = require('../medicine-name-profile');
-const { LATIN_TO_CYRILLIC, LATIN_HOMOGLYPH_RE } = require('../latin-to-cyrillic');
-const { TRADE_NAME_ABBREV_TOKEN_ALIASES } = require('../medicine-lookup-common');
+const {
+  TRADE_NAME_ABBREV_TOKEN_ALIASES,
+  normalizeLatinHomoglyphs,
+  normalizeSqlTerm,
+} = require('../medicine-lookup-common');
 const { CONTAINER_NORMALIZERS } = require('./constants');
-
-function normalizeLatinHomoglyphs(text) {
-  return String(text || '').replace(/\S+/g, (word) => {
-    if (/[\u0400-\u04ff]/u.test(word) && /[a-zA-Z]/u.test(word)) {
-      return word.replace(LATIN_HOMOGLYPH_RE, (char) => LATIN_TO_CYRILLIC[char] || char);
-    }
-    return word;
-  });
-}
-
-function normalizeSqlTerm(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/ё/g, 'е')
-    .trim();
-}
 
 function normalizeTradeNameAbbrevToken(token) {
   const normalized = String(token || '').toLowerCase().replace(/ё/g, 'е');

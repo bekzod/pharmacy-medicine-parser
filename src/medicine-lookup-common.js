@@ -1,3 +1,5 @@
+const { LATIN_TO_CYRILLIC, LATIN_HOMOGLYPH_RE } = require('./latin-to-cyrillic');
+
 const TRADE_NAME_ABBREV_TOKEN_ALIASES = new Map([
   ['ср', 'sr'],
   ['мр', 'mr'],
@@ -13,6 +15,15 @@ function normalizeSqlTerm(value) {
     .toLowerCase()
     .replace(/ё/g, 'е')
     .trim();
+}
+
+function normalizeLatinHomoglyphs(text) {
+  return String(text || '').replace(/\S+/g, (word) => {
+    if (/[\u0400-\u04ff]/u.test(word) && /[a-zA-Z]/u.test(word)) {
+      return word.replace(LATIN_HOMOGLYPH_RE, (char) => LATIN_TO_CYRILLIC[char] || char);
+    }
+    return word;
+  });
 }
 
 function buildNormalizedNameExpr(alias = 'm') {
@@ -74,11 +85,16 @@ function buildBaseSqlTokenVariants(token) {
   return [...variants];
 }
 
-function buildLikeAnyCondition(expression, keys) {
-  if (!keys.length) return '';
-  return `(${keys
-    .map((key) => `${expression} LIKE '%' || :${key} || '%' ESCAPE '\\'`)
-    .join(' OR ')})`;
+function buildLikeAnyPredicates(expressions, keys) {
+  const expressionList = Array.isArray(expressions) ? expressions : [expressions];
+  return expressionList.flatMap((expression) =>
+    keys.map((key) => `${expression} LIKE '%' || :${key} || '%' ESCAPE '\\'`),
+  );
+}
+
+function buildLikeAnyCondition(expressions, keys) {
+  const predicates = buildLikeAnyPredicates(expressions, keys);
+  return predicates.length ? `(${predicates.join(' OR ')})` : '';
 }
 
 function mergeCandidates(...candidateGroups) {
@@ -106,10 +122,12 @@ module.exports = {
   TRADE_NAME_ABBREV_TOKEN_ALIASES,
   escapeLikePattern,
   normalizeSqlTerm,
+  normalizeLatinHomoglyphs,
   buildNormalizedNameExpr,
   buildNormalizedColumnExpr,
   blendedTokenSimilarity,
   buildBaseSqlTokenVariants,
+  buildLikeAnyPredicates,
   buildLikeAnyCondition,
   mergeCandidates,
 };
