@@ -62,3 +62,79 @@ test('strict strength recall matches comma-delimited stored strength components'
     'expected strict strength recall not to use broad substring matching',
   );
 });
+
+test('strict fallback adds mg/ml equivalents for percent strengths', () => {
+  const parsed = parseMedicineQuery('Риназолин спрей 0.05% 15мл');
+  const searchQuery = buildMedicineSearchQuery(parsed, {
+    limit: 5,
+    requireParsedAttributeMatch: true,
+    strictParsedAttributeFilters: true,
+  });
+
+  assert.ok(
+    Object.values(searchQuery.replacements).includes('0.5 мг/мл'),
+    'expected percent strength to add mg/ml equivalent',
+  );
+});
+
+test('strict fallback adds mg/g equivalents for percent mass products', () => {
+  const parsed = parseMedicineQuery('Артрокол гель 2.5%/45г№1');
+  const searchQuery = buildMedicineSearchQuery(parsed, {
+    limit: 5,
+    requireParsedAttributeMatch: true,
+    strictParsedAttributeFilters: true,
+  });
+
+  const replacementValues = Object.values(searchQuery.replacements);
+  assert.ok(
+    replacementValues.includes('25 мг/г'),
+    'expected percent strength with mass package to add mg/g equivalent',
+  );
+  assert.ok(
+    !replacementValues.includes('25 мг/мл'),
+    'expected percent strength with mass package not to add mg/ml equivalent',
+  );
+});
+
+test('wet wipes keep name fallback search', () => {
+  const parsed = parseMedicineQuery('Детские Влажные салфетки гигиенические Cotton Club №25');
+  const searchQuery = buildMedicineSearchQuery(parsed, { limit: 5 });
+
+  assert.ok(
+    searchQuery.sql.includes('(m.trade_name IS NOT NULL OR m.name IS NOT NULL)'),
+    'expected wet wipes to admit catalog rows with only a name',
+  );
+});
+
+test('strict fallback combines multiple ratio strengths for catalog strength columns', () => {
+  const parsed = parseMedicineQuery('Бримоптик капли 2мг/мл+5мг/мл 10мл');
+  const searchQuery = buildMedicineSearchQuery(parsed, {
+    limit: 5,
+    requireParsedAttributeMatch: true,
+    strictParsedAttributeFilters: true,
+  });
+
+  const replacementValues = Object.values(searchQuery.replacements);
+  assert.ok(
+    replacementValues.includes('2 мг/мл+5 мг/мл'),
+    'expected plus-joined same-denominator ratio text',
+  );
+  assert.ok(
+    replacementValues.includes('2 мг/мл, 5 мг/мл'),
+    'expected comma-joined same-denominator ratio text',
+  );
+});
+
+test('strict pack-one recall admits null pack for standalone mass products', () => {
+  const parsed = parseMedicineQuery('Вата мед. н/с 100г №1');
+  const searchQuery = buildMedicineSearchQuery(parsed, {
+    limit: 5,
+    requireParsedAttributeMatch: true,
+    strictParsedAttributeFilters: true,
+  });
+
+  assert.ok(
+    searchQuery.sql.includes('(m.pack = :packCount OR m.pack IS NULL)'),
+    'expected pack-one standalone mass products to admit null pack',
+  );
+});

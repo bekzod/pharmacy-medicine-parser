@@ -306,13 +306,13 @@ const deviceAndProductTypeCases = [
 }],
   ['keeps decimal syringe size tokens when brand tokens exist', 'Шприц однок. прим. KD-JECT III инсулин. 0.5мл U100', {
   product_type: 'device',
-  trade_name_text: 'шприц однок прим kd-ject iii инсулин 0.5 мл u100',
+  trade_name_text: 'шприц однок прим kd-ject iii инсулин 0.5 мл u-100',
   trade_name_tokens: [
     'шприц', 'однок',
     'прим',  'kd-ject',
     'iii',   'инсулин',
     '0.5',   'мл',
-    'u100'
+    'u-100'
   ]
 }],
   ['classifies toothbrush listings as non-medicine products', 'БИОМЕД Интенсив минерал з.щетка жесткая', {
@@ -878,6 +878,110 @@ const annotationAndVariantCases = [
   ['keeps alphabet parenthesized short variant tokens', 'АЛФАВИТ ТАБ. №60 (КЛАССИК)', { trade_name_tokens: [ 'алфавит', 'классик' ], pack_count: 60 }],
   ['keeps standalone short variant tokens', 'ВИТАМИН Д3+К2 КАПС. №60 SWANSON', { trade_name_tokens: [ 'витамин', 'д3', 'к2', 'swanson' ], pack_count: 60 }],
 ];
+
+test('normalizes common genitive and spelling-variant trade tokens', () => {
+  assertParsedCase({
+    query: 'Био Хлоргексидина 90мл №1',
+    expected: {
+      attributes: {
+        trade_name_text: 'био хлоргексидин',
+        trade_name_tokens: ['био', 'хлоргексидин'],
+        volumes: [volume('90 мл', 90, 'мл')],
+        pack_count: 1,
+      },
+    },
+  });
+
+  assertParsedCase({
+    query: 'Бифилакс-Бэби саше.0.6г.№10',
+    expected: {
+      attributes: {
+        trade_name_text: 'бифилакс бейби',
+        trade_name_tokens: ['бифилакс', 'бейби'],
+        container_type: 'sachet',
+        strengths: [simple('0.6 г', [0.6], 0.6, 'г')],
+        pack_count: 10,
+      },
+    },
+  });
+
+  assertParsedCase({
+    query: 'Бороплюс смягчающий крем для ухода за кожей 100мл',
+    expected: {
+      attributes: {
+        trade_name_text: 'боро плюс софт',
+        trade_name_tokens: ['боро', 'плюс', 'софт'],
+        dosage_form: 'cream',
+        volumes: [volume('100 мл', 100, 'мл')],
+      },
+    },
+  });
+});
+
+test('normalizes cotton sterility and wet wipes descriptor order', () => {
+  assertParsedCase({
+    query: 'Вата гигиеническая гигрос. н/с 50г',
+    expected: {
+      attributes: {
+        trade_name_text: 'вата гигр нестер',
+        trade_name_tokens: ['вата', 'гигр', 'нестер'],
+        product_type: null,
+        strengths: [simple('50 г', [50], 50, 'г')],
+      },
+    },
+  });
+
+  assertParsedCase({
+    query: 'Вата мед. гигрос. стерильн. 50г',
+    expected: {
+      attributes: {
+        trade_name_text: 'вата гигр стер',
+        trade_name_tokens: ['вата', 'гигр', 'стер'],
+        strengths: [simple('50 г', [50], 50, 'г')],
+      },
+    },
+  });
+
+  assertParsedCase({
+    query: 'Детские Влажные салфетки гигиенические Cotton Club №25',
+    expected: {
+      attributes: {
+        trade_name_text: 'салфетки влажные cotton club',
+        trade_name_tokens: ['салфетки', 'влажные', 'cotton', 'club'],
+        product_type: 'other',
+        pack_count: 25,
+      },
+    },
+  });
+});
+
+test('normalizes gummy magnesium B6 and compact percent-volume after dot', () => {
+  assertParsedCase({
+    query: 'Витагум-Магний+Б6 150г Мармелад',
+    expected: {
+      attributes: {
+        trade_name_text: 'витагам витамин магний в6 мармеладки',
+        trade_name_tokens: ['витагам', 'витамин', 'магний', 'в6', 'мармеладки'],
+        strengths: [simple('150 г', [150], 150, 'г')],
+      },
+    },
+  });
+
+  assertParsedCase({
+    query: 'Кальция хлорид амп.10%.5мл№10',
+    expected: {
+      attributes: {
+        trade_name_text: 'кальция хлорид',
+        trade_name_tokens: ['кальция', 'хлорид'],
+        dosage_form: 'injection',
+        container_type: 'ampoule',
+        strengths: [simple('10%', [10], 10, '%')],
+        volumes: [volume('5 мл', 5, 'мл')],
+        pack_count: 10,
+      },
+    },
+  });
+});
 
 addCases(implicitStrengthCases);
 addCases(deviceAndProductTypeCases);

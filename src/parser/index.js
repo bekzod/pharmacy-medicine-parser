@@ -66,6 +66,51 @@ const {
 } = require('./trade-name');
 const { ParseState } = require('./state');
 
+function normalizeTradeNameAbbrevTokens(tokens) {
+  return tokens.flatMap((token) =>
+    normalizeTradeNameAbbrevToken(token).split(/\s+/u).filter(Boolean),
+  );
+}
+
+function normalizeCottonTradeTokens(tokens) {
+  if (!tokens.includes('вата')) return tokens;
+  const filtered = tokens
+    .map((token) => {
+      if (/^нестерильн/u.test(token)) return 'нестер';
+      if (/^стерильн/u.test(token)) return 'стер';
+      return token;
+    })
+    .filter((token) => token !== 'мед' && token !== 'гигиеническая');
+  if (
+    filtered.includes('гигр') ||
+    (!filtered.includes('стер') && !filtered.includes('нестер'))
+  ) {
+    return filtered;
+  }
+
+  const cottonIndex = filtered.indexOf('вата');
+  return [
+    ...filtered.slice(0, cottonIndex + 1),
+    'гигр',
+    ...filtered.slice(cottonIndex + 1),
+  ];
+}
+
+function normalizeWetWipesTradeTokens(tokens) {
+  if (!tokens.includes('салфетки') || !tokens.some((token) => token.startsWith('влаж'))) {
+    return tokens;
+  }
+
+  const rest = tokens.filter(
+    (token) =>
+      token !== 'салфетки' &&
+      !token.startsWith('влаж') &&
+      token !== 'гигиенические' &&
+      token !== 'гигиеническая',
+  );
+  return ['салфетки', 'влажные', ...rest];
+}
+
 function parseMedicineQuery(rawQuery) {
   const normalizedText = normalizeMedicineQuery(rawQuery);
   const tokens = tokenizeNormalizedQuery(normalizedText);
@@ -533,6 +578,16 @@ function parseMedicineQuery(rawQuery) {
   const filteredResidueTokens = removableAnnotationNoiseTokens.size
     ? tradeNameResidueTokens.filter((token) => !removableAnnotationNoiseTokens.has(token))
     : tradeNameResidueTokens;
+  if (
+    filteredResidueTokens.includes('вата') &&
+    !filteredResidueTokens.some((token) => /^стер|^нестер/u.test(token))
+  ) {
+    if (/(?<![а-яёa-z0-9])нестерильн[а-яё.]*(?![а-яёa-z0-9])/iu.test(normalizedText)) {
+      filteredResidueTokens.push('нестерильн');
+    } else if (/(?<![а-яёa-z0-9])стерильн[а-яё.]*(?![а-яёa-z0-9])/iu.test(normalizedText)) {
+      filteredResidueTokens.push('стерильн');
+    }
+  }
   if (removableAnnotationNoiseTokens.size) {
     for (const [tokenIndex, role] of state.tokenRoles) {
       if (role !== 'trade_name') continue;
@@ -541,13 +596,15 @@ function parseMedicineQuery(rawQuery) {
     }
   }
   const cyrillicTokenSet = new Set(filteredResidueTokens.filter((t) => /[\u0400-\u04ff]/u.test(t)));
-  const tradeNameTokens = filteredResidueTokens
+  const tradeNameTokens = normalizeWetWipesTradeTokens(normalizeCottonTradeTokens(filteredResidueTokens
     .filter((token) => {
-    if (/[\u0400-\u04ff]/u.test(token)) return true;
-    const transliterated = transliterateLatinToCyrillic(token);
-    return !cyrillicTokenSet.has(transliterated);
+      if (/[\u0400-\u04ff]/u.test(token)) return true;
+      const transliterated = transliterateLatinToCyrillic(token);
+      return !cyrillicTokenSet.has(transliterated);
     })
-    .map((token) => normalizeTradeNameAbbrevToken(token));
+    .flatMap((token) =>
+      normalizeTradeNameAbbrevToken(token).split(/\s+/u).filter(Boolean),
+    )));
 
   maybeInferVitaminDStrength({
     state,
@@ -648,16 +705,20 @@ function parseMedicineQuery(rawQuery) {
   );
   ({ strengths, volumes } = simplifyInhalationDoseRatios(strengths, volumes, state.dosageForm));
   volumes = dedupePublicNodes(volumes);
-  const productType = classifyProductType(rawQuery, normalizedText, {
+  let productType = classifyProductType(rawQuery, normalizedText, {
     dosageForm: state.dosageForm,
     strengths,
     volumes,
   });
+  if (tradeNameTokens.includes('вата')) {
+    productType = null;
+  }
   if (!tradeNameTokens.length) {
     const recoveredTradeName = recoverHyphenatedEnemaTradeName(tokens);
     if (recoveredTradeName) tradeNameTokens.push(recoveredTradeName);
   }
-  const tradeNameText = tradeNameTokens.join(' ').trim() || null;
+  const normalizedTradeNameTokens = normalizeTradeNameAbbrevTokens(tradeNameTokens);
+  const tradeNameText = normalizedTradeNameTokens.join(' ').trim() || null;
 
   const annotatedTokens = state.annotatedTokens();
 
@@ -673,17 +734,22 @@ function parseMedicineQuery(rawQuery) {
       }
     }
     const useFullTradeNameTokens = productType === 'device';
+    const normalizedTradeNameTokens = normalizeTradeNameAbbrevTokens(tradeNameTokens);
+    const isCottonProduct = normalizedTradeNameTokens.includes('вата');
     const fullTradeNameTokens =
       (tradeNameTokens.length && !useFullTradeNameTokens) || !fullTradeName
-        ? tradeNameTokens
-        : fullTradeName.split(/\s+/u).filter(Boolean).map((token) => normalizeTradeNameAbbrevToken(token));
+        ? normalizedTradeNameTokens
+        : normalizeTradeNameAbbrevTokens(fullTradeName.split(/\s+/u).filter(Boolean));
+    const fullTradeNameText = fullTradeNameTokens.join(' ').trim() || null;
     return {
       rawQuery: rawQuery || '',
       normalizedText,
       tokens: annotatedTokens,
       residueTokens: fullTradeNameTokens,
       attributes: {
-        trade_name_text: fullTradeName,
+        trade_name_text: isCottonProduct
+          ? normalizedTradeNameTokens.join(' ')
+          : fullTradeNameText,
         trade_name_tokens: fullTradeNameTokens,
         dosage_form: null,
         dosage_form_token: null,
@@ -693,8 +759,8 @@ function parseMedicineQuery(rawQuery) {
         product_type: productType,
         vendor_country_text: vendorCountry,
         vendor_country_tokens: vendorCountryTokens,
-        strengths: [],
-        volumes: [],
+        strengths: isCottonProduct ? strengths : [],
+        volumes: isCottonProduct ? volumes : [],
         pack_count: state.packCount,
       },
     };
@@ -707,7 +773,7 @@ function parseMedicineQuery(rawQuery) {
     residueTokens: tradeNameTokens,
     attributes: {
       trade_name_text: tradeNameText,
-      trade_name_tokens: tradeNameTokens.map((token) => normalizeTradeNameAbbrevToken(token)),
+      trade_name_tokens: normalizedTradeNameTokens,
       dosage_form: state.dosageForm || null,
       dosage_form_token: state.dosageFormToken?.normalizedValue || null,
       dosage_form_source: state.dosageFormSource,

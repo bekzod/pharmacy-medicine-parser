@@ -123,6 +123,25 @@ function addRatioEquivalentStrengthTexts(values, strength, volumes = []) {
   }
 }
 
+function hasPackageUnit(volumes, units) {
+  return (volumes || []).some((volume) => units.has(String(volume?.unit || '').toLowerCase()));
+}
+
+function addPercentEquivalentStrengthTexts(values, strength, volumes = []) {
+  if (strength?.kind !== 'simple' || strength.value == null) return;
+  if (String(strength.unit || '').toLowerCase() !== '%') return;
+
+  const percent = Number(strength.value);
+  if (!Number.isFinite(percent)) return;
+  const concentration = formatMeasurementNumber(percent * 10);
+  if (!concentration) return;
+  const denominator = hasPackageUnit(volumes, new Set(['г', 'кг'])) &&
+    !hasPackageUnit(volumes, new Set(['мл', 'л']))
+    ? 'г'
+    : 'мл';
+  values.add(`${concentration} мг/${denominator}`);
+}
+
 function buildDelimitedAnyPredicates(expressions, keys) {
   return expressions.flatMap((expression) =>
     keys.map(
@@ -173,7 +192,7 @@ function buildAttributeScoreExpression(attributeExpr, replacements, prefix, valu
   return `(${perValueExprs.join(' + ')}) / ${groups.length}`;
 }
 
-function buildStrengthSearchTexts(strengths) {
+function buildStrengthSearchTexts(strengths, volumes = []) {
   const values = new Set();
 
   for (const strength of strengths) {
@@ -181,6 +200,7 @@ function buildStrengthSearchTexts(strengths) {
     values.add(strength.text);
     addDoseUnitAliasStrengthTexts(values, strength);
     addSameUnitMultiValueStrengthTexts(values, strength);
+    addPercentEquivalentStrengthTexts(values, strength, volumes);
 
     if (strength.kind === 'combination') {
       for (const component of strength.components || []) {
@@ -275,6 +295,48 @@ function addSameUnitMultiValueStrengthTexts(values, strength) {
   addSameUnitComponentTextVariants(values, numericValues, strength.unit);
 }
 
+function normalizeRatioStrengthComponent(strength) {
+  if (strength?.kind !== 'ratio' || strength.value == null || !strength.unit) return null;
+  const numerator = normalizeMeasurementValue(strength.value, strength.unit);
+  const denominator = normalizeMeasurementValue(
+    strength.denominator?.value == null ? 1 : strength.denominator.value,
+    strength.denominator?.unit,
+  );
+  if (!numerator || !denominator || denominator.value <= 0) return null;
+  const numeratorText = formatMeasurementNumber(numerator.value);
+  const denominatorText = formatMeasurementNumber(denominator.value);
+  if (!numeratorText || !denominatorText) return null;
+
+  return {
+    key: `${numerator.unit}/${denominatorText} ${denominator.unit}`,
+    text:
+      denominator.value === 1
+        ? `${numeratorText} ${numerator.unit}/${denominator.unit}`
+        : `${numeratorText} ${numerator.unit}/${denominatorText} ${denominator.unit}`,
+  };
+}
+
+function addSameDenominatorRatioStrengthTexts(values, strengths) {
+  const components = (strengths || []).map(normalizeRatioStrengthComponent).filter(Boolean);
+  if (components.length < 2) return;
+
+  const grouped = new Map();
+  for (const component of components) {
+    const groupedComponents = grouped.get(component.key) || [];
+    groupedComponents.push(component.text);
+    grouped.set(component.key, groupedComponents);
+  }
+
+  for (const componentTexts of grouped.values()) {
+    if (componentTexts.length < 2) continue;
+    const reversedComponentTexts = [...componentTexts].reverse();
+    values.add(componentTexts.join(', '));
+    values.add(componentTexts.join('+'));
+    values.add(reversedComponentTexts.join(', '));
+    values.add(reversedComponentTexts.join('+'));
+  }
+}
+
 function buildStrictStrengthSearchTexts(strengths, volumes = []) {
   const values = new Set();
   const validStrengths = (strengths || []).filter((strength) => strength?.text);
@@ -294,6 +356,7 @@ function buildStrictStrengthSearchTexts(strengths, volumes = []) {
     addDoseUnitAliasStrengthTexts(values, strength);
     addSameUnitMultiValueStrengthTexts(values, strength);
     addRatioEquivalentStrengthTexts(values, strength, volumes);
+    addPercentEquivalentStrengthTexts(values, strength, volumes);
 
     if (strength.kind === 'combination') {
       const components = Array.isArray(strength.components) ? strength.components : [];
@@ -327,6 +390,8 @@ function buildStrictStrengthSearchTexts(strengths, volumes = []) {
     if (unit === 'мг') values.add(`${String(value / 1000)} г`);
     if (unit === 'мкг') values.add(`${String(value / 1000)} мг`);
   }
+
+  addSameDenominatorRatioStrengthTexts(values, validStrengths);
 
   return [...values];
 }
@@ -563,7 +628,7 @@ function buildMedicineSearchQuery(parsedQuery, options = {}) {
   const strengthSearchTexts = includeMeasurementSearchTexts
     ? strictParsedAttributeFilters
       ? buildStrictStrengthSearchTexts(attributes.strengths || [], attributes.volumes || [])
-      : buildStrengthSearchTexts(attributes.strengths || [])
+      : buildStrengthSearchTexts(attributes.strengths || [], attributes.volumes || [])
     : [];
   if (strengthSearchTexts.length && structuredSearch) {
     const strengthScoreExpression = buildAttributeScoreExpression(
@@ -630,8 +695,19 @@ function buildMedicineSearchQuery(parsedQuery, options = {}) {
         : '(m.product_type = :productType OR m.product_type IS NULL)',
     );
   }
+  const hasParsedVolume = (attributes.volumes || []).length > 0;
+  const hasParsedStandaloneMass =
+    !attributes.dosage_form &&
+    !hasParsedVolume &&
+    (attributes.strengths || []).some(
+      (strength) =>
+        strength?.kind === 'simple' &&
+        ['г', 'кг'].includes(String(strength.unit || '').toLowerCase()),
+    );
   const relaxPackOneNullMatch =
-    attributes.pack_count === 1 && PACK_ONE_NULL_COMPATIBLE_DOSAGE_FORMS.has(attributes.dosage_form);
+    attributes.pack_count === 1 &&
+    (PACK_ONE_NULL_COMPATIBLE_DOSAGE_FORMS.has(attributes.dosage_form) ||
+      (!attributes.dosage_form && (hasParsedVolume || hasParsedStandaloneMass)));
   if (hasParsedPackCount && requireParsedAttributeMatch) {
     candidateBaseConditions.push(
       relaxPackOneNullMatch ? '(m.pack = :packCount OR m.pack IS NULL)' : 'm.pack = :packCount',
