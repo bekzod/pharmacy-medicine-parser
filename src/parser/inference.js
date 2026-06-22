@@ -487,6 +487,41 @@ function maybeInferPowderMilligramStrength({
   dropPromotedTradeNameValues(tradeNameTokens, [tokens[strengthIndex].value]);
 }
 
+const CONCENTRATE_RE = /(?<![а-яё])конц(?:\.|ентрат[а-я]*)?/iu;
+
+function maybeInferConcentratePerMlStrength({ state, rawQuery, dosageFormRoute }) {
+  if (!CONCENTRATE_RE.test(String(rawQuery || ''))) return;
+  if (dosageFormRoute !== 'infusion' && dosageFormRoute !== 'injection') return;
+
+  const massStrengths = state.strengthCandidates.filter(
+    (strength) =>
+      strength?.kind === 'simple' &&
+      MASS_UNITS_FOR_DOSE_INFERENCE.has(strength.unit) &&
+      strength.value != null,
+  );
+  if (massStrengths.length !== 1) return;
+
+  const strength = massStrengths[0];
+  const adjacentMlVolume = state.volumeCandidates.find(
+    (volume) => volume?.unit === 'мл' && volume.startIndex === strength.endIndex + 1,
+  );
+  if (!adjacentMlVolume) return;
+
+  const strengthIndex = state.strengthCandidates.indexOf(strength);
+  if (strengthIndex === -1) return;
+
+  state.replaceStrength(
+    strengthIndex,
+    buildRatioStrengthNode(
+      strength.values,
+      strength.unit,
+      { value: null, unit: 'мл' },
+      strength.startIndex,
+      strength.endIndex,
+    ),
+  );
+}
+
 function hasRepeatedStrengthNumberLater(tokens, index) {
   const token = tokens[index];
   if (token?.type !== 'NUMBER') return false;
@@ -571,6 +606,7 @@ module.exports = {
   maybeInferLiquidPackageVolume,
   maybeInferPowderGramStrength,
   maybeInferPowderMilligramStrength,
+  maybeInferConcentratePerMlStrength,
   hasRepeatedStrengthNumberLater,
   hasPrefilledSyringeSignal,
   lowerToken,
