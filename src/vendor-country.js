@@ -1,9 +1,4 @@
-function normalizeSqlTerm(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/ё/g, 'е')
-    .trim();
-}
+const { normalizeSqlTerm } = require('./medicine-lookup-common');
 
 const VENDOR_TABLE_COUNTRIES = [
   'австралия',

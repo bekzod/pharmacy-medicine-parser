@@ -5,6 +5,7 @@ const {
   MEDICINE_FORM_TO_DOSAGE_FORMS,
   parseDosageForm,
 } = require('./medicine-dosage-forms');
+const { normalizeLatinHomoglyphs } = require('./medicine-lookup-common');
 
 const MEDICINE_DECIMAL_MARKER = '~';
 
@@ -242,17 +243,6 @@ const MEDICINE_DESCRIPTOR_TOKENS = new Set(
 function normalizePackValue(value) {
   if (!value) return null;
   return value === '1' ? null : value;
-}
-
-const { LATIN_TO_CYRILLIC, LATIN_HOMOGLYPH_RE } = require('./latin-to-cyrillic');
-
-function normalizeLatinHomoglyphs(text) {
-  return text.replace(/\S+/g, (word) => {
-    if (/[\u0400-\u04ff]/u.test(word) && /[a-zA-Z]/u.test(word)) {
-      return word.replace(LATIN_HOMOGLYPH_RE, (ch) => LATIN_TO_CYRILLIC[ch] || ch);
-    }
-    return word;
-  });
 }
 
 function normalizeMedicineSearchText(name) {
