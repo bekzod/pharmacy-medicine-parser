@@ -191,8 +191,9 @@ function normalizeMedicineQuery(rawQuery) {
     )
     .replace(/\bsoft\s*gels?\b/giu, 'softgel')
     .replace(/\bveg\s*caps(?:ule)?s?\b/giu, 'vegcaps')
-    .replace(/(?<![\p{L}\d])(\d{1,2}(?:\s+\d{3})+|[1-9]\d{2}(?:\s+0{3})+)(?![\p{L}\d])/gu, (value) =>
-      value.replace(/\s+/gu, ''),
+    .replace(
+      /(?<![\p{L}\d])(\d{1,2}(?:\s+\d{3})+|[1-9]\d{2}(?:\s+0{3})+)(?=(?:мкг|мг|мл|кг|г|л|ме|ед)(?![\p{L}\d])|[^\p{L}\d]|$)/giu,
+      (value) => value.replace(/\s+/gu, ''),
     )
     .replace(/№\s*(\d+)/gu, '')
     .replace(/№/gu, '')
