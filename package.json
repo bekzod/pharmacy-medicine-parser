@@ -6,7 +6,16 @@
   "type": "commonjs",
   "main": "src/index.js",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./parser": "./src/parser/index.js",
+    "./query-builder": "./src/parser/query-builder.js",
+    "./lookup-profiles": "./src/medicine-lookup-profiles.js",
+    "./fuzzy-search": "./src/medicine-fuzzy-search.js",
+    "./medicine-dosage-forms": "./src/medicine-dosage-forms.js",
+    "./medicine-name-profile": "./src/medicine-name-profile.js",
+    "./vendor-country": "./src/vendor-country.js",
+    "./latin-to-cyrillic": "./src/latin-to-cyrillic.js",
+    "./medicine-lookup-common": "./src/medicine-lookup-common.js"
   },
   "scripts": {
     "test": "node --test"
