@@ -102,6 +102,61 @@ test('strict fallback adds mg/g equivalents for percent mass products', () => {
   );
 });
 
+test('strict fallback adds per-ml aliases for mass-denominator ratios', () => {
+  const parsed = parseMedicineQuery('Бетадин р-р 100мг/г 120мл');
+  const searchQuery = buildMedicineSearchQuery(parsed, {
+    limit: 5,
+    requireParsedAttributeMatch: true,
+    strictParsedAttributeFilters: true,
+  });
+
+  const replacementValues = Object.values(searchQuery.replacements);
+  assert.ok(replacementValues.includes('100 мг/г'), 'expected original mg/g ratio');
+  assert.ok(replacementValues.includes('100 мг/мл'), 'expected mg/ml alias');
+  assert.ok(replacementValues.includes('100 мг/1 мл'), 'expected explicit 1 ml alias');
+  assert.ok(!replacementValues.includes('100 мг'), 'expected no numerator-only alias');
+});
+
+test('strict fallback does not add numerator-only aliases for per-ml ratios', () => {
+  const parsed = parseMedicineQuery('Бримоптик капли 2мг/мл+5мг/мл 10мл');
+  const searchQuery = buildMedicineSearchQuery(parsed, {
+    limit: 5,
+    requireParsedAttributeMatch: true,
+    strictParsedAttributeFilters: true,
+  });
+
+  const replacementValues = Object.values(searchQuery.replacements);
+  assert.ok(!replacementValues.includes('2 мг'), 'expected no first numerator-only alias');
+  assert.ok(!replacementValues.includes('5 мг'), 'expected no second numerator-only alias');
+});
+
+test('strict fallback does not add per-ml aliases for gram-packaged mass ratios', () => {
+  const parsed = parseMedicineQuery('Изигел плюс 50мг/г+30мг/г 40г №1');
+  const searchQuery = buildMedicineSearchQuery(parsed, {
+    limit: 5,
+    requireParsedAttributeMatch: true,
+    strictParsedAttributeFilters: true,
+  });
+
+  const replacementValues = Object.values(searchQuery.replacements);
+  assert.ok(!replacementValues.includes('50 мг/мл'), 'expected no first per-ml alias');
+  assert.ok(!replacementValues.includes('30 мг/мл'), 'expected no second per-ml alias');
+});
+
+test('strict fallback reverses separate simple strength pairs', () => {
+  const parsed = parseMedicineQuery('Арлеверт 40мг/20мг №20');
+  const searchQuery = buildMedicineSearchQuery(parsed, {
+    limit: 5,
+    requireParsedAttributeMatch: true,
+    strictParsedAttributeFilters: true,
+  });
+
+  const replacementValues = Object.values(searchQuery.replacements);
+  assert.ok(replacementValues.includes('40 мг/20 мг'), 'expected original slash order');
+  assert.ok(replacementValues.includes('20 мг/40 мг'), 'expected reversed slash order');
+  assert.ok(replacementValues.includes('20 мг, 40 мг'), 'expected reversed comma order');
+});
+
 test('wet wipes keep name fallback search', () => {
   const parsed = parseMedicineQuery('Детские Влажные салфетки гигиенические Cotton Club №25');
   const searchQuery = buildMedicineSearchQuery(parsed, { limit: 5 });
