@@ -374,6 +374,14 @@ const measurementAndRouteCases = [
   pack_count: 1,
   strengths: [ { kind: 'simple', text: '0.5 мг', values: [ 0.5 ], value: 0.5, unit: 'мг' } ]
 }],
+  ['parses underscore compact syringe dose as medicine ratio', 'Репо р-р.инъек.6000ЕД_0.6мл.Шприц№1', {
+  trade_name_text: 'репо',
+  dosage_form: 'injection',
+  product_type: 'medicine',
+  pack_count: 1,
+  strengths: [ { kind: 'ratio', text: '6000 ед/0.6 мл', values: [ 6000 ], value: 6000, unit: 'ед', denominator: { value: 0.6, unit: 'мл' } } ],
+  volumes: [ { text: '0.6 мл', value: 0.6, unit: 'мл' } ]
+}],
   ['infers sachet pack count before po-strength phrase', 'Тайлолфен Хот порошок для приготовления раствора для приема внутрь, 12 пакетиков по 20 г', {
   trade_name_text: 'тайлолфен хот',
   container_type: 'sachet',
@@ -395,6 +403,12 @@ const measurementAndRouteCases = [
   trade_name_text: 'аквадетрим',
   dosage_form: 'drops',
   volumes: [ { text: '10 мл', value: 10, unit: 'мл' } ]
+}],
+  ['keeps explicit drops form for dose per ml strengths', "Назоферон, 100'000 МЕ/мл, 5 мл, капли назал.", {
+  trade_name_text: 'назоферон',
+  dosage_form: 'drops',
+  strengths: [ { kind: 'ratio', text: '100000 ме/мл', values: [ 100000 ], value: 100000, unit: 'ме', denominator: { value: null, unit: 'мл' } } ],
+  volumes: [ { text: '5 мл', value: 5, unit: 'мл' } ]
 }],
   ['parses k-li eye drop abbreviation from surrounding context', 'БЕЛАТИРС ИНТЕНСИВ к-ли глазные 10мл', {
   trade_name_text: 'белатирс интенсив',

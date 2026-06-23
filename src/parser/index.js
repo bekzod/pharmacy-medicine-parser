@@ -416,7 +416,7 @@ function inferInjectionFromDoseRatio(state) {
   const hasDoseRatioPerMl = state.strengthCandidates.some(
     (s) => s.kind === 'ratio' && DOSE_UNITS.has(s.unit) && s.denominator?.unit === 'мл',
   );
-  if (hasDoseRatioPerMl && state.dosageForm !== 'injection') {
+  if (hasDoseRatioPerMl && state.dosageForm !== 'injection' && state.dosageFormSource !== 'explicit') {
     state.dosageForm = 'injection';
     state.dosageFormSource = 'inferred_from_strength';
   }
