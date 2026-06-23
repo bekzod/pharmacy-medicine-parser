@@ -111,19 +111,32 @@ function addRatioEquivalentStrengthTexts(values, strength, volumes = []) {
     strength.denominator?.unit,
   );
   if (!numerator || !denominator || denominator.value <= 0) return;
-  if (denominator.unit !== 'мл') return;
 
-  const concentration = formatMeasurementNumber(numerator.value / denominator.value);
+  const denominatorUnit = String(strength.denominator?.unit || '').toLowerCase();
+  const denominatorMl =
+    denominator.unit === 'мл'
+      ? denominator.value
+      : denominatorUnit === 'г' && hasPackageUnit(volumes, PERCENT_VOLUME_PACKAGE_UNITS)
+        ? denominator.value / 1000
+        : null;
+  const concentration =
+    denominatorMl && denominatorMl > 0
+      ? formatMeasurementNumber(numerator.value / denominatorMl)
+      : null;
   if (concentration) values.add(`${concentration} ${numerator.unit}/мл`);
 
-  for (const volume of volumes) {
-    const normalizedVolume = normalizeMeasurementValue(volume?.value, volume?.unit);
-    if (!normalizedVolume || normalizedVolume.unit !== denominator.unit) continue;
-    const total = formatMeasurementNumber(
-      (numerator.value * normalizedVolume.value) / denominator.value,
-    );
-    if (total) values.add(`${total} ${numerator.unit}`);
+  if (denominator.unit === 'мл') {
+    for (const volume of volumes) {
+      const normalizedVolume = normalizeMeasurementValue(volume?.value, volume?.unit);
+      if (!normalizedVolume || normalizedVolume.unit !== denominator.unit) continue;
+      const total = formatMeasurementNumber(
+        (numerator.value * normalizedVolume.value) / denominator.value,
+      );
+      if (total) values.add(`${total} ${numerator.unit}`);
+    }
   }
+
+  if (concentration) values.add(`${concentration} ${numerator.unit}/1 мл`);
 }
 
 function hasPackageUnit(volumes, units) {
@@ -257,8 +270,11 @@ function buildStrengthSearchTextsWithPolicy(strengths, volumes = [], { strict = 
     validStrengths.every((strength) => strength.kind === 'simple')
   ) {
     const simpleStrengthTexts = validStrengths.map((strength) => strength.text);
+    const reversedStrengthTexts = [...simpleStrengthTexts].reverse();
     values.add(simpleStrengthTexts.join('/'));
     values.add(simpleStrengthTexts.join(', '));
+    values.add(reversedStrengthTexts.join('/'));
+    values.add(reversedStrengthTexts.join(', '));
     return [...values];
   }
 
