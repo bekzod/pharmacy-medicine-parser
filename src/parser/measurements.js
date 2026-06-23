@@ -380,7 +380,9 @@ function dedupePublicNodes(nodes) {
 function formatNormalizedNumber(value) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return String(value || '');
-  return Number.isInteger(numericValue) ? String(Math.trunc(numericValue)) : String(numericValue);
+  return Number.isInteger(numericValue)
+    ? String(Math.trunc(numericValue))
+    : String(Number(numericValue.toFixed(6))).replace(/\.?0+$/u, '');
 }
 
 function buildSameUnitSlashStrength(normalizedText) {
@@ -567,6 +569,7 @@ module.exports = {
   toPublicStrengthNode,
   toPublicMeasurementNode,
   dedupePublicNodes,
+  formatNormalizedNumber,
   mergeSameUnitSlashStrength,
   inferInhalationPerDoseStrengths,
   simplifyInhalationDoseRatios,

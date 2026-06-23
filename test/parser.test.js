@@ -116,6 +116,13 @@ const implicitStrengthCases = [
   pack_count: 60,
   strengths: [ { kind: 'simple', text: '500 мг', values: [ 500 ], value: 500, unit: 'мг' } ]
 }],
+  ['does not apply oral-solid brand strength inference to explicit syrup forms', 'Сиофор сироп 500 №1', {
+  trade_name_text: 'сиофор',
+  dosage_form: 'syrup',
+  pack_count: 1,
+  strengths: [],
+  volumes: [volume('500 мл', 500, 'мл')]
+}],
   ['preserves duplicate components in same-unit slash strengths', 'ЭКВАМЕР КАПС. 20МГ/10МГ/10МГ №30', {
   trade_name_text: 'эквамер',
   dosage_form: 'capsule',

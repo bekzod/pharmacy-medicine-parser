@@ -26,11 +26,22 @@ function escapeLikePattern(value) {
   return String(value || '').replace(/[\\%_]/g, '\\$&');
 }
 
+const NORMALIZATION_MODES = {
+  sql: [
+    (value) => value.toLowerCase(),
+    (value) => value.replace(/ё/g, 'е'),
+    (value) => value.trim(),
+  ],
+};
+
+function normalizeText(value, mode = 'sql') {
+  const rules = NORMALIZATION_MODES[mode];
+  if (!rules) throw new Error(`Unknown normalization mode: ${mode}`);
+  return rules.reduce((normalized, rule) => rule(normalized), String(value || ''));
+}
+
 function normalizeSqlTerm(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/ё/g, 'е')
-    .trim();
+  return normalizeText(value, 'sql');
 }
 
 function normalizeLatinHomoglyphs(text) {
@@ -57,6 +68,7 @@ function buildLikeAnyCondition(expressions, keys) {
 module.exports = {
   TRADE_NAME_ABBREV_TOKEN_ALIASES,
   escapeLikePattern,
+  normalizeText,
   normalizeSqlTerm,
   normalizeLatinHomoglyphs,
   buildLikeAnyPredicates,
