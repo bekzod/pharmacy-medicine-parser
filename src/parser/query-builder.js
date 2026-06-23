@@ -102,6 +102,14 @@ function normalizeMeasurementValue(value, unit) {
 
 function addRatioEquivalentStrengthTexts(values, strength, volumes = []) {
   if (!strength || strength.kind !== 'ratio' || strength.value == null || !strength.unit) return;
+  if (
+    String(strength.denominator?.unit || '').toLowerCase() === 'доз' &&
+    strength.denominator?.value == null
+  ) {
+    values.add(`${formatMeasurementNumber(strength.value)} ${String(strength.unit).toLowerCase()}`);
+    return;
+  }
+
   const numerator = normalizeMeasurementValue(strength.value, strength.unit);
   const denominator = normalizeMeasurementValue(
     strength.denominator?.value == null ? 1 : strength.denominator.value,
@@ -146,7 +154,7 @@ function buildDelimitedAnyPredicates(expressions, keys) {
   return expressions.flatMap((expression) =>
     keys.map(
       (key) =>
-        `(${expression} = :${key} OR ${expression} LIKE :${key} || ',%' ESCAPE '\\' OR ${expression} LIKE '%, ' || :${key} ESCAPE '\\' OR ${expression} LIKE '%, ' || :${key} || ',%' ESCAPE '\\')`,
+        `(${expression} = :${key} OR ${expression} LIKE :${key} || ',%' ESCAPE '\\' OR ${expression} LIKE '%, ' || :${key} ESCAPE '\\' OR ${expression} LIKE '%, ' || :${key} || ',%' ESCAPE '\\' OR ${expression} LIKE :${key} || '/%' ESCAPE '\\' OR ${expression} LIKE '%/' || :${key} ESCAPE '\\')`,
     ),
   );
 }
@@ -739,11 +747,10 @@ function buildMedicineSearchQuery(parsedQuery, options = {}) {
       'volumeFilter',
       volumeSearchTexts,
     );
-    candidateBaseConditions.push(
-      strictParsedAttributeFilters
-        ? buildDelimitedAnyCondition([normalizedVolumeExpr], volumeFilterKeys)
-        : buildLikeAnyCondition([normalizedAttributeOrNameExpr], volumeFilterKeys),
-    );
+    const volumeFilterCondition = strictParsedAttributeFilters
+      ? buildDelimitedAnyCondition([normalizedVolumeExpr], volumeFilterKeys)
+      : buildLikeAnyCondition([normalizedAttributeOrNameExpr], volumeFilterKeys);
+    candidateBaseConditions.push(`(${volumeFilterCondition} OR ${normalizedVolumeExpr} = '')`);
   }
   if (vendorIds.length === 1) {
     replacements.vendorId = vendorIds[0];

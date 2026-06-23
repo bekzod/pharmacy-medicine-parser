@@ -159,6 +159,35 @@ const implicitStrengthCases = [
   pack_count: 30,
   strengths: [ { kind: 'simple', text: '2000 ме', values: [ 2000 ], value: 2000, unit: 'ме' } ]
 }],
+  ['parses apostrophe thousands activity units', "Виферон-2, 500'000 МЕ, супп. рект. №10", {
+  trade_name_text: 'виферон-2',
+  dosage_form: 'suppository',
+  pack_count: 10,
+  strengths: [simple('500000 ме', [500000], 500000, 'ме')]
+}],
+  ['parses compact anti-Xa dot activity strength', 'Велвин-4000 анти-Ха.МЕ/0,4мл №10 (Эноксапарин натрия)', {
+  trade_name_text: 'велвин',
+  pack_count: 10,
+  strengths: [ratio('4000 ме/0.4 мл', [4000], 4000, 'ме', { value: 0.4, unit: 'мл' })]
+}],
+  ['normalizes camphor spirit adjectives for trade identity', 'Камфора р-р спиртовый 10% 25мл', {
+  trade_name_text: 'камфора спирт',
+  trade_name_tokens: ['камфора', 'спирт'],
+  strengths: [simple('10%', [10], 10, '%')],
+  volumes: [volume('25 мл', 25, 'мл')]
+}],
+  ['normalizes abbreviated Garamycin combination tokens for trade identity', 'Целестодерм В с гарамиц. крем 30г', {
+  trade_name_tokens: ['целестодерм', 'в', 'с', 'гарамицин'],
+  volumes: [volume('30 г', 30, 'г')]
+}],
+  ['parses compact decimal slash strengths', 'Максфло-Д капс. 0,5мг/0,4мг №30', {
+  trade_name_text: 'максфло-д',
+  pack_count: 30,
+  strengths: [
+    simple('0.5 мг', [0.5], 0.5, 'мг'),
+    simple('0.4 мг', [0.4], 0.4, 'мг')
+  ]
+}],
   ['infers low bare tablet strength for Olfrex', 'ОЛФРЕКС 5 ТАБ. №28', {
   trade_name_text: 'олфрекс',
   strengths: [ { kind: 'simple', text: '5 мг', values: [ 5 ], value: 5, unit: 'мг' } ]
@@ -520,6 +549,35 @@ const measurementAndRouteCases = [
   ],
   pack_count: 10
 }],
+  ['keeps blank stored volume candidates for strict volume filters', 'Бруфен сироп 100мг/5мл 100мл', {
+  trade_name_text: 'бруфен',
+  dosage_form: 'syrup',
+  dosage_form_route: 'oral',
+  strengths: [ratio('100 мг/5 мл', [100], 100, 'мг', { value: 5, unit: 'мл' })],
+  volumes: [volume('100 мл', 100, 'мл')]
+}, {
+  search: {
+    options: { limit: 5, requireParsedAttributeMatch: true, strictParsedAttributeFilters: true },
+    filterPrefix: 'volumeFilter',
+    filterValuesInclude: ['100 мл'],
+    sqlIncludes: ["lower(coalesce(m.volume, '')) = ''"]
+  }
+}],
+  ['matches slash-delimited stored component strengths', 'Гайнекс ваг.супп.500мг№14', {
+  trade_name_text: 'гайнекс',
+  dosage_form: 'suppository',
+  dosage_form_route: 'vaginal',
+  strengths: [simple('500 мг', [500], 500, 'мг')],
+  pack_count: 14
+}, {
+  search: {
+    options: { limit: 5, requireParsedAttributeMatch: true, strictParsedAttributeFilters: true },
+    replacementsEqual: { tradeNameQuery: 'гайнекс' },
+    filterPrefix: 'strengthFilter',
+    filterValuesInclude: ['500 мг'],
+    sqlIncludes: ["LIKE :strengthFilter0_0 || '/%'"]
+  }
+}],
   ['parses slash aerosol dose count forms', 'Беклометазон аэр.250мкг/200 Бинно фарм', {
   trade_name_text: 'беклометазон бинно фарм',
   strengths: [
@@ -547,6 +605,18 @@ const measurementAndRouteCases = [
     }
   ],
   volumes: [ { text: '200 доз', value: 200, unit: 'доз' } ]
+}],
+  ['matches stored simple strength for per-dose aerosol strengths', 'Беклометазон 250мкг/доз 200доз аэрозоль', {
+  trade_name_text: 'беклометазон',
+  dosage_form: 'aerosol',
+  strengths: [ratio('250 мкг/доз', [250], 250, 'мкг', { value: null, unit: 'доз' })],
+  volumes: [volume('200 доз', 200, 'доз')]
+}, {
+  search: {
+    options: { limit: 5, requireParsedAttributeMatch: true, strictParsedAttributeFilters: true },
+    filterPrefix: 'strengthFilter',
+    filterValuesInclude: ['250 мкг/доз', '250 мкг']
+  }
 }],
   ['does not parse Gelik trade name as gel dosage form', 'Гелик, 20 г, гель.', {
   trade_name_text: 'гелик',

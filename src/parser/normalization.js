@@ -53,7 +53,9 @@ function parseContainerType(token) {
 }
 
 function normalizeRawSegment(segment) {
-  const value = normalizeSqlTerm(segment).replace(/[.,]+$/gu, '');
+  const value = normalizeSqlTerm(segment)
+    .replace(/(\d),(\d)/gu, '$1.$2')
+    .replace(/[.,]+$/gu, '');
   if (!value) return '';
 
   if (value.includes('+')) {
@@ -160,8 +162,8 @@ function normalizeMedicineQuery(rawQuery) {
     // be followed by UNIT), so anticoagulants priced per anti-Xa IU never
     // parse their strength. Both the referent_prices input and the medicines
     // DB store strength this way, so the collapse stays symmetric.
-    .replace(/анти[-\s]*(?:ха|xa)\s*ме/giu, 'МЕ')
-    .replace(/anti[-\s]*xa\s*(?:iu|me)/giu, 'МЕ')
+    .replace(/анти[-\s]*(?:ха|xa)[.\s]*ме/giu, 'МЕ')
+    .replace(/anti[-\s]*xa[.\s]*(?:iu|me)/giu, 'МЕ')
     // Аnti-Trypsin Equivalents: aprotinin-family drugs (Контрикал, Гордокс,
     // Апростад…) are dosed in АТрЕ / ATpE. Treat as МЕ for symmetric parsing.
     // \b is ASCII-only and Cyrillic letters count as non-word, so the
@@ -174,9 +176,10 @@ function normalizeMedicineQuery(rawQuery) {
       ' ',
     )
     .replace(/(\d),(\d)/gu, '$1.$2')
+    .replace(/(?<=\d)['’](?=\d{3}(?!\d))/gu, '')
     .replace(/(\d+(?:\.\d+)?)(мкг|мг|мл|кг|г|л|ме|ед|%)\s*\/\s*№(?=\s*\d)/giu, '$1 $2 №')
     .replace(/(\d+(?:\.\d+)?)(мкг|мг)\s*\/\s*(?:д|доз)(?![\p{L}\d])/giu, '$1 $2/доз')
-    .replace(/(\d+(?:\.\d+)?)(мкг|мг)\s*\/\s*(\d+)(?![\p{L}\d])/giu, '$1 $2/$3 доз')
+    .replace(/(\d+(?:\.\d+)?)(мкг|мг)\s*\/\s*(\d+)(?![.\p{L}\d])/giu, '$1 $2/$3 доз')
     .replace(/д\s*\/\s*п(?!риг)(?:-?го)?/giu, ' ')
     .replace(/(р\s*[-/]\s*р)(?=\d)/giu, '$1 ')
     .replace(/(\d)(мкг|мг|мл|кг|г|л|ме|ед)\s*\/\s+(?=\d)/giu, '$1$2/')
