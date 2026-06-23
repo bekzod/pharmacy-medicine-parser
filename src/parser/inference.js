@@ -374,18 +374,13 @@ function maybeInferTrailingOralSolidPackCount({ state, tradeNameTokens }) {
   if (!ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(dosageForm)) return null;
   if (!state.strengthCandidates.length) return null;
 
-  const candidateIndexes = [];
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (state.hasConsumed(index)) continue;
-    const token = tokens[index];
-    if (token?.type !== 'NUMBER') continue;
-    if (!Number.isFinite(token.numericValue) || !Number.isInteger(token.numericValue)) continue;
-    if (token.numericValue < 2 || token.numericValue > 200) continue;
-    candidateIndexes.push(index);
-  }
-  if (candidateIndexes.length !== 1) return null;
+  const packIndex = findSoleNumericCandidate(tokens, {
+    consumedIndexes: state.consumedIndexes,
+    min: 2,
+    max: 200,
+  });
+  if (packIndex == null) return null;
 
-  const packIndex = candidateIndexes[0];
   let hasStrengthBefore = false;
   for (let index = 0; index < packIndex; index += 1) {
     if (state.tokenRoles.get(index) === 'strength') {
@@ -429,20 +424,15 @@ function maybeInferPowderGramStrength({ state, tradeNameTokens }) {
   if (state.strengthCandidates.length > 0) return;
   if (state.packCount == null) return;
 
-  const candidateIndexes = [];
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (state.hasConsumed(index)) continue;
-    const token = tokens[index];
-    if (token?.type !== 'NUMBER') continue;
-    if (!Number.isFinite(token.numericValue)) continue;
-    if (token.numericValue <= 0 || token.numericValue > 10) continue;
-    if (state.packCount != null && token.numericValue === state.packCount) continue;
-    candidateIndexes.push(index);
-  }
+  const strengthIndex = findSoleNumericCandidate(tokens, {
+    consumedIndexes: state.consumedIndexes,
+    packCount: state.packCount,
+    min: Number.MIN_VALUE,
+    max: 10,
+    requireInteger: false,
+  });
+  if (strengthIndex == null) return;
 
-  if (candidateIndexes.length !== 1) return;
-
-  const strengthIndex = candidateIndexes[0];
   const strengthNode = buildSimpleStrengthNode(
     [tokens[strengthIndex].numericValue],
     'г',
