@@ -265,6 +265,53 @@ const ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG = new Set(['йодомарин']);
 const LEVOTHYROXINE_TABLET_TRADES = new Set(['l-тироксин']);
 const LIQUID_FORMS_WITH_IMPLICIT_ML_VOLUME = new Set(['syrup']);
 
+const ORAL_SOLID_STRENGTH_RULES = [
+  {
+    tradeTokens: LEVOTHYROXINE_TABLET_TRADES,
+    formGuard: (dosageForm) => dosageForm === 'tablet',
+    min: 25,
+    max: 5000,
+    unit: 'мкг',
+  },
+  {
+    tradeTokens: ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG,
+    requiresPackWithoutForm: true,
+    min: 25,
+    max: 5000,
+    unit: 'мкг',
+    allowPackMatch: true,
+  },
+  {
+    tradeTokens: ORAL_SOLID_TRADES_WITH_IMPLICIT_G,
+    requiresPackWithoutForm: true,
+    min: 0.01,
+    max: 5000,
+    unit: 'г',
+    requireInteger: false,
+  },
+  {
+    tradeTokens: ORAL_SOLID_TRADES_WITH_LOW_IMPLICIT_MG,
+    requiresPackWithoutForm: true,
+    min: 1,
+    max: 5000,
+    unit: 'мг',
+    requireInteger: false,
+  },
+  {
+    tradeTokens: ORAL_SOLID_TRADES_WITH_IMPLICIT_MG,
+    requiresPackWithoutForm: true,
+    min: 25,
+    max: 5000,
+    unit: 'мг',
+  },
+  {
+    formGuard: (dosageForm) => ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(dosageForm),
+    min: 25,
+    max: 5000,
+    unit: 'мг',
+  },
+];
+
 function tradeNameTokensInclude(tradeNameTokens, tokenSet) {
   return (tradeNameTokens || []).some((token) =>
     tokenSet.has(String(token || '').toLowerCase()),
@@ -279,25 +326,26 @@ function dropPromotedTradeNameValues(tradeNameTokens, values) {
   }
 }
 
+function findOralSolidStrengthRule({ dosageForm, packCount, tradeNameTokens }) {
+  return ORAL_SOLID_STRENGTH_RULES.find((rule) => {
+    if (rule.tradeTokens && !tradeNameTokensInclude(tradeNameTokens, rule.tradeTokens)) return false;
+    if (rule.formGuard && !rule.formGuard(dosageForm)) return false;
+    if (dosageForm && !rule.formGuard && !ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(dosageForm)) return false;
+    if (!dosageForm && !rule.tradeTokens) return false;
+    if (!dosageForm && rule.requiresPackWithoutForm && packCount == null) return false;
+    return true;
+  });
+}
+
 function maybeInferOralSolidStrength({ state, tradeNameTokens }) {
   const { tokens, dosageForm } = state;
-  const hasKnownOralSolidTrade =
-    !dosageForm &&
-    state.packCount != null &&
-    (tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_SLASH_IMPLICIT_MG) ||
-      tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_MG) ||
-      tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_G) ||
-      tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_LOW_IMPLICIT_MG) ||
-      tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG));
-  if (
-    (!dosageForm || !ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(dosageForm)) &&
-    !hasKnownOralSolidTrade
-  ) {
-    return;
-  }
   if (state.strengthCandidates.length > 0) return;
 
-  if (tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_SLASH_IMPLICIT_MG)) {
+  if (
+    tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_SLASH_IMPLICIT_MG) &&
+    ((dosageForm && ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(dosageForm)) ||
+      (!dosageForm && state.packCount != null))
+  ) {
     const slashSequences = [];
     for (let index = 0; index < tokens.length; index += 1) {
       if (state.hasConsumed(index) || tokens[index]?.type !== 'NUMBER') continue;
@@ -325,38 +373,26 @@ function maybeInferOralSolidStrength({ state, tradeNameTokens }) {
     }
   }
 
-  const allowLowStrength = tradeNameTokensInclude(
+  const rule = findOralSolidStrengthRule({
+    dosageForm,
+    packCount: state.packCount,
     tradeNameTokens,
-    ORAL_SOLID_TRADES_WITH_LOW_IMPLICIT_MG,
-  );
-  const allowGramStrength = tradeNameTokensInclude(
-    tradeNameTokens,
-    ORAL_SOLID_TRADES_WITH_IMPLICIT_G,
-  );
-  const allowStrengthMatchingPackCount = tradeNameTokensInclude(
-    tradeNameTokens,
-    ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG,
-  );
+  });
+  if (!rule) return;
+
   const strengthIndex = findSoleNumericCandidate(tokens, {
     consumedIndexes: state.consumedIndexes,
     packCount: state.packCount,
-    min: allowGramStrength ? 0.01 : allowLowStrength ? 1 : 25,
-    max: 5000,
-    requireInteger: !(allowGramStrength || allowLowStrength),
-    allowPackCountMatch: allowStrengthMatchingPackCount,
+    min: rule.min,
+    max: rule.max,
+    requireInteger: rule.requireInteger !== false,
+    allowPackCountMatch: rule.allowPackMatch === true,
   });
   if (strengthIndex == null) return;
 
-  const inferredUnit =
-    (dosageForm === 'tablet' && tradeNameTokensInclude(tradeNameTokens, LEVOTHYROXINE_TABLET_TRADES)) ||
-    tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG)
-      ? 'мкг'
-      : tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_G)
-        ? 'г'
-      : 'мг';
   const strengthNode = buildSimpleStrengthNode(
     [tokens[strengthIndex].numericValue],
-    inferredUnit,
+    rule.unit,
     strengthIndex,
     strengthIndex,
   );

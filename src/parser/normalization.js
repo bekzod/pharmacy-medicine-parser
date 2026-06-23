@@ -14,6 +14,29 @@ const {
 } = require('../medicine-lookup-common');
 const { CONTAINER_NORMALIZERS } = require('./constants');
 
+const RAW_SEGMENT_BASE_REWRITES = [
+  [/(\d),(\d)/gu, '$1.$2'],
+  [/[.,]+$/gu, ''],
+];
+
+const MEDICINE_QUERY_FINAL_REWRITES = [
+  [/\s*\+\s*/gu, ' + '],
+  [/(\d+(?:\.\d+)?)\s+%/gu, '$1%'],
+  [
+    /(\d+(?:\.\d+)?)\s+([\p{L}%]+)\s+\/\s+(\d+(?:\.\d+)?)\s+([\p{L}%]+)/gu,
+    '$1 $2/$3 $4',
+  ],
+  [/(\d+(?:\.\d+)?)\s+([\p{L}%]+)\s+\/\s+([\p{L}%]+)/gu, '$1 $2/$3'],
+  [/\s+/gu, ' '],
+];
+
+function applyRewriteRules(value, rules) {
+  return rules.reduce(
+    (normalized, [pattern, replacement]) => normalized.replace(pattern, replacement),
+    String(value || ''),
+  );
+}
+
 function normalizeTradeNameAbbrevToken(token) {
   const normalized = String(token || '').toLowerCase().replace(/ё/g, 'е');
   return TRADE_NAME_ABBREV_TOKEN_ALIASES.get(normalized) || normalized;
@@ -53,9 +76,7 @@ function parseContainerType(token) {
 }
 
 function normalizeRawSegment(segment) {
-  const value = normalizeSqlTerm(segment)
-    .replace(/(\d),(\d)/gu, '$1.$2')
-    .replace(/[.,]+$/gu, '');
+  const value = applyRewriteRules(normalizeSqlTerm(segment), RAW_SEGMENT_BASE_REWRITES);
   if (!value) return '';
 
   if (value.includes('+')) {
@@ -241,17 +262,12 @@ function normalizeMedicineQuery(rawQuery) {
 
   if (!prepared) return '';
 
-  return prepared
+  const tokenized = prepared
     .split(' ')
     .map(normalizeRawSegment)
     .filter(Boolean)
-    .join(' ')
-    .replace(/\s*\+\s*/gu, ' + ')
-    .replace(/(\d+(?:\.\d+)?)\s+%/gu, '$1%')
-    .replace(/(\d+(?:\.\d+)?)\s+([\p{L}%]+)\s+\/\s+(\d+(?:\.\d+)?)\s+([\p{L}%]+)/gu, '$1 $2/$3 $4')
-    .replace(/(\d+(?:\.\d+)?)\s+([\p{L}%]+)\s+\/\s+([\p{L}%]+)/gu, '$1 $2/$3')
-    .replace(/\s+/gu, ' ')
-    .trim();
+    .join(' ');
+  return applyRewriteRules(tokenized, MEDICINE_QUERY_FINAL_REWRITES).trim();
 }
 
 module.exports = {

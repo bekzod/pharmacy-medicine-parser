@@ -4,9 +4,10 @@ const {
   SYRINGE_RE,
 } = require('./constants');
 
+const PHARMA_STRENGTH_UNITS = new Set(['мг', 'мкг', '%', 'ед', 'ме']);
+
 function classifyProductType(rawQuery, normalizedText, { dosageForm, strengths, volumes } = {}) {
   const text = `${rawQuery || ''} ${normalizedText || ''}`.trim();
-  const PHARMA_STRENGTH_UNITS = new Set(['мг', 'мкг', '%', 'ед', 'ме']);
   const hasPharmaStrength = (strengths || []).some(
     (s) =>
       (s.kind === 'simple' && PHARMA_STRENGTH_UNITS.has(s.unit)) ||
