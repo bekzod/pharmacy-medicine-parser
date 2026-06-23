@@ -10,7 +10,18 @@ const {
 } = api;
 
 test('exports documented package API only', () => {
-  assert.deepEqual(Object.keys(pkg.exports), ['.']);
+  assert.deepEqual(Object.keys(pkg.exports).sort(), [
+    '.',
+    './fuzzy-search',
+    './latin-to-cyrillic',
+    './lookup-profiles',
+    './medicine-dosage-forms',
+    './medicine-lookup-common',
+    './medicine-name-profile',
+    './parser',
+    './query-builder',
+    './vendor-country',
+  ].sort());
   assert.deepEqual(Object.keys(api).sort(), [
     'buildMedicineSearchQuery',
     'buildQueryLookupProfiles',

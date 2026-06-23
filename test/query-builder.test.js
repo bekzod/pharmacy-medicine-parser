@@ -4,6 +4,12 @@ const {
   parseMedicineQuery,
   buildMedicineSearchQuery,
 } = require('../src');
+const { formatMeasurementNumber } = require('../src/parser/query-builder');
+
+test('exports measurement formatter for lookup compatibility', () => {
+  assert.equal(formatMeasurementNumber(2.5000001), '2.5');
+  assert.equal(formatMeasurementNumber(10), '10');
+});
 
 test('admits candidates with no stored strength under strict strength recall', () => {
   const parsed = parseMedicineQuery('синуприн капс 250 мг №60');
