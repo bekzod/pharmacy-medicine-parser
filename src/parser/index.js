@@ -732,7 +732,6 @@ function parseMedicineQuery(rawQuery) {
       }
     }
     const useFullTradeNameTokens = productType === 'device';
-    const normalizedTradeNameTokens = normalizeTradeNameAbbrevTokens(tradeNameTokens);
     const isCottonProduct = normalizedTradeNameTokens.includes('вата');
     const fullTradeNameTokens =
       (tradeNameTokens.length && !useFullTradeNameTokens) || !fullTradeName

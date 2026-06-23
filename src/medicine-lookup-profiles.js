@@ -158,6 +158,20 @@ function shouldUseSegmentAttributes(segment, attributes, wholeTradeName) {
   return segmentText === normalizedWholeTradeName;
 }
 
+function buildBrandOnlyDetails(attributes) {
+  return {
+    trade_name: normalizeStoredLookupValue(attributes.trade_name_text),
+    container_type: null,
+    dosage_form: null,
+    product_type: attributes.product_type || null,
+    strength: null,
+    volume: null,
+    pack: Number.isInteger(attributes.pack_count) ? attributes.pack_count : null,
+    strengthTexts: [],
+    volumeTexts: [],
+  };
+}
+
 function collectStructuredDetails(name) {
   const rawName = String(name || '').trim();
   const tradeName = parseTradeName(rawName);
@@ -179,17 +193,7 @@ function collectStructuredDetails(name) {
   if (findDelimitedCommaIndex(rawName) === -1) {
     const wholeQuery = parseMedicineQuery(rawName).attributes;
     if (isBrandOnlyProductType(wholeQuery.product_type)) {
-      return {
-        trade_name: normalizeStoredLookupValue(wholeQuery.trade_name_text),
-        container_type: null,
-        dosage_form: null,
-        product_type: wholeQuery.product_type || null,
-        strength: null,
-        volume: null,
-        pack: Number.isInteger(wholeQuery.pack_count) ? wholeQuery.pack_count : null,
-        strengthTexts: [],
-        volumeTexts: [],
-      };
+      return buildBrandOnlyDetails(wholeQuery);
     }
 
     return {
@@ -212,17 +216,7 @@ function collectStructuredDetails(name) {
   const wholeQuery = parseMedicineQuery(rawName).attributes;
 
   if (isBrandOnlyProductType(wholeQuery.product_type)) {
-    return {
-      trade_name: normalizeStoredLookupValue(wholeQuery.trade_name_text),
-      container_type: null,
-      dosage_form: null,
-      product_type: wholeQuery.product_type || null,
-      strength: null,
-      volume: null,
-      pack: Number.isInteger(wholeQuery.pack_count) ? wholeQuery.pack_count : null,
-      strengthTexts: [],
-      volumeTexts: [],
-    };
+    return buildBrandOnlyDetails(wholeQuery);
   }
 
   const tradeNameSegmentQuery = parseMedicineQuery(tradeName).attributes;

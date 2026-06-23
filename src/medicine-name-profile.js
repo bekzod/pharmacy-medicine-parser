@@ -351,14 +351,6 @@ function extractMedicineDosageForms(rawName, profileForm = null) {
   return [...dosageForms];
 }
 
-function isIgnoredStandaloneNumericToken(token) {
-  return /^0\d*$/u.test(token);
-}
-
-function shouldIgnoreStandaloneNumericSequence(tokens) {
-  return tokens.some((token) => isIgnoredStandaloneNumericToken(token));
-}
-
 function hasJoinedMedicineTokenSequence(rawName, left, right) {
   const normalizedName = String(rawName || '')
     .toLowerCase()
@@ -561,7 +553,7 @@ function extractMedicineProfile(name) {
   flushStandaloneStrengthNumbers();
 
   for (const group of standaloneStrengthNumberGroups) {
-    if (shouldIgnoreStandaloneNumericSequence(group)) continue;
+    if (group.some((token) => /^0\d*$/u.test(token))) continue;
 
     for (const numberToken of group) {
       if (!pairedStrengthNumbers.has(numberToken)) {

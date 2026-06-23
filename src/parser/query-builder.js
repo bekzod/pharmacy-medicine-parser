@@ -74,12 +74,8 @@ function appendReplacementsWithVariants(
   return keys;
 }
 
-function buildExactAnyPredicates(expressions, keys) {
-  return expressions.flatMap((expression) => keys.map((key) => `${expression} = :${key}`));
-}
-
 function buildExactAnyCondition(expressions, keys) {
-  return `(${buildExactAnyPredicates(expressions, keys).join(' OR ')})`;
+  return `(${expressions.flatMap((expression) => keys.map((key) => `${expression} = :${key}`)).join(' OR ')})`;
 }
 
 function formatMeasurementNumber(value) {
