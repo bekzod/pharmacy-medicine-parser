@@ -58,6 +58,16 @@ const PARSER_NOISE_TOKENS = new Set([
   'дозир',
   'местн',
   'наружн',
+  'носовая',
+  'носовое',
+  'носового',
+  'носовом',
+  'носовому',
+  'носовую',
+  'носовые',
+  'носовым',
+  'носовыми',
+  'носовых',
   'оральный',
   'оральная',
   'оральное',
@@ -191,6 +201,7 @@ const PARSER_NOISE_TOKENS = new Set([
   'ингаляции',
   'иг',
   'рр',
+  'масл',
   // Pharmacy-listing trailing abbreviations that aren't ingredients or brand
   // tokens. "ЖР" appears at the tail of solution listings (e.g.
   // "ГЛЮКОЗА Р-Р 5% 500МЛ ЖР") and pollutes the trade-name signal.

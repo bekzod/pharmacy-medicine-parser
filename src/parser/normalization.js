@@ -23,6 +23,10 @@ const MEDICINE_QUERY_FINAL_REWRITES = [
   [/\s*\+\s*/gu, ' + '],
   [/(\d+(?:\.\d+)?)\s+%/gu, '$1%'],
   [
+    /(?<![\p{L}\d])(\d{1,2}(?:\s+\d{3})+)\s+(мкг|мг|мл|кг|г|л|ме|ед)(?![\p{L}\d])/giu,
+    (match, value, unit) => `${value.replace(/\s+/gu, '')} ${unit}`,
+  ],
+  [
     /(\d+(?:\.\d+)?)\s+([\p{L}%]+)\s+\/\s+(\d+(?:\.\d+)?)\s+([\p{L}%]+)/gu,
     '$1 $2/$3 $4',
   ],
@@ -231,10 +235,12 @@ function normalizeMedicineQuery(rawQuery) {
     .replace(/№\s*(\d+)/gu, '')
     .replace(/№/gu, '')
     .replace(/\\/gu, '/')
+    .replace(/(\d+(?:\.\d+)?\s*(?:мл|л|мг|мкг|г|кг|ме|ед|доз))\*+/giu, '$1 ')
     .replace(/(?<![а-яёa-z0-9])н\s*\/\s*с(?![а-яёa-z0-9])/giu, ' нестер ')
     .replace(/[,:;!?()[\]{}"'`«»]+/gu, ' ')
     .replace(/(?<!\d)\.(?!\d)/gu, ' ')
     .replace(/(?<![\p{L}\d])карри\s+ф\s+а(?![\p{L}\d])/giu, 'carry f a')
+    .replace(/(?<![\p{L}\d])фотилфорте(?![\p{L}\d])/giu, 'фотил форте')
     .replace(/д\s*\/\s*при[её]м\s+внут(?:рь?)?/giu, ' ')
     .replace(/(?<=\p{L})\.(?=\d)/gu, ' ')
     // Split Cyrillic-letter\u2192digit boundaries (e.g. "\u043a\u0440\u0435\u043c15\u0433" \u2192 "\u043a\u0440\u0435\u043c 15\u0433") so

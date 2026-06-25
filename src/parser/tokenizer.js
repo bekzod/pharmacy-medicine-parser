@@ -126,7 +126,23 @@ function restorePlasticBottleAnnotationTokens(tokens) {
   });
 }
 
-const BARE_KAP_DROP_CONTEXT_RE = /^(глаз|наз|нос|уш|офтальм)/u;
+const BARE_KAP_DROP_CONTEXT_TOKENS = new Set([
+  'глаз',
+  'наз',
+  'нос',
+  'уш',
+  'офтальм',
+  'носовая',
+  'носовое',
+  'носового',
+  'носовом',
+  'носовому',
+  'носовую',
+  'носовые',
+  'носовым',
+  'носовыми',
+  'носовых',
+]);
 
 function hasVolumeMeasurementAfter(tokens, index, lookahead = 6) {
   const end = Math.min(tokens.length - 1, index + lookahead);
@@ -149,8 +165,13 @@ function inferBareKapDosageForm(tokens, index, packCount) {
   const nextWord = tokens
     .slice(index + 1, Math.min(tokens.length, index + 4))
     .find((candidate) => candidate?.type === 'WORD' && candidate.normalizedValue);
+  const previousWord = tokens
+    .slice(Math.max(0, index - 3), index)
+    .reverse()
+    .find((candidate) => candidate?.type === 'WORD' && candidate.normalizedValue);
   if (
-    (nextWord && BARE_KAP_DROP_CONTEXT_RE.test(nextWord.normalizedValue)) ||
+    (previousWord && BARE_KAP_DROP_CONTEXT_TOKENS.has(previousWord.normalizedValue)) ||
+    (nextWord && BARE_KAP_DROP_CONTEXT_TOKENS.has(nextWord.normalizedValue)) ||
     hasVolumeMeasurementAfter(tokens, index)
   ) {
     return {

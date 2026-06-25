@@ -174,6 +174,12 @@ const implicitStrengthCases = [
   pack_count: 30,
   strengths: [ { kind: 'simple', text: '2000 ме', values: [ 2000 ], value: 2000, unit: 'ме' } ]
 }],
+  ['parses spaced thousands activity units before separated unit', 'Д-ВИТ ЛАМИРА ТАБ. 50 000ME №8', {
+  trade_name_text: 'д-вит ламира',
+  dosage_form: 'tablet',
+  pack_count: 8,
+  strengths: [ { kind: 'simple', text: '50000 ме', values: [ 50000 ], value: 50000, unit: 'ме' } ]
+}],
   ['parses apostrophe thousands activity units', "Виферон-2, 500'000 МЕ, супп. рект. №10", {
   trade_name_text: 'виферон-2',
   dosage_form: 'suppository',
@@ -447,10 +453,29 @@ const measurementAndRouteCases = [
   strengths: [ { kind: 'simple', text: '300 мг', values: [ 300 ], value: 300, unit: 'мг' } ],
   pack_count: 20
 }],
+  ['does not treat route-like brand prefix before кап as drops', 'Глазовит кап. №30', {
+  trade_name_text: 'глазовит',
+  dosage_form: 'capsule',
+  pack_count: 30
+}],
+  ['parses inflected nasal кап context without volume as drops', 'Бренд кап. носовые №10', {
+  trade_name_text: 'бренд',
+  dosage_form: 'drops',
+  pack_count: 10
+}],
   ['parses eye drop кап abbreviation from surrounding context', 'Бримоптик кап.глазн. 2мг/мл 5мг/мл 10мл', {
   trade_name_text: 'бримоптик',
   dosage_form: 'drops',
   volumes: [ { text: '10 мл', value: 10, unit: 'мл' } ]
+}],
+  ['parses гл.кап. abbreviation as eye drops', 'Глаумакс Плюс гл.кап.20мг/мл+5мг/мл №1', {
+  trade_name_text: 'глаумакс плюс',
+  dosage_form: 'drops',
+  strengths: [
+    ratio('20 мг/мл', [20], 20, 'мг', { value: null, unit: 'мл' }),
+    ratio('5 мг/мл', [5], 5, 'мг', { value: null, unit: 'мл' })
+  ],
+  pack_count: 1
 }],
   ['parses plain drop кап abbreviation from surrounding context', 'Аквадетрим кап. 10мл', {
   trade_name_text: 'аквадетрим',
@@ -482,11 +507,17 @@ const measurementAndRouteCases = [
   volumes: [ { text: '10 мл', value: 10, unit: 'мл' } ]
 }],
   ['parses hyphen-glued eye drop abbreviation from surrounding context', 'ФотилФорте-кап.глаз.4%5мл№1', {
-  trade_name_text: 'фотилфорте',
+  trade_name_text: 'фотил форте',
+  trade_name_tokens: [ 'фотил', 'форте' ],
   dosage_form: 'drops',
   strengths: [ { kind: 'simple', text: '4%', values: [ 4 ], value: 4, unit: '%' } ],
   volumes: [ { text: '5 мл', value: 5, unit: 'мл' } ],
   pack_count: 1
+}, {
+  search: {
+    options: { limit: 5 },
+    sqlIncludes: [ 'CASE WHEN m.trade_name = :tradeNameQuery THEN 0.05 ELSE 0 END' ]
+  }
 }],
   ['treats gram-packaged combination drops as per-gram strength', 'Фелисанс уш.капли 40мг+10мг 16г №1', {
   trade_name_text: 'фелисанс',
@@ -991,6 +1022,22 @@ const measurementAndRouteCases = [
   strengths: [ ratio('1000 мг/4 мл', [1000], 1000, 'мг', { value: 4, unit: 'мл' }) ],
   pack_count: 5
 }],
+  ['infers omitted injectable mass unit before slash volume', 'РОНОЦИТ АМП. 1000/4МЛ №5', {
+  trade_name_text: 'роноцит',
+  dosage_form: 'injection',
+  container_type: 'ampoule',
+  strengths: [ ratio('1000 мг/4 мл', [1000], 1000, 'мг', { value: 4, unit: 'мл' }) ],
+  volumes: [ { text: '4 мл', value: 4, unit: 'мл' } ],
+  pack_count: 5
+}],
+  ['infers omitted injectable mass unit for injection-route solution', 'Артексим р-р.д/внут.введ.1000/4мл №3', {
+  trade_name_text: 'артексим',
+  dosage_form: 'solution',
+  dosage_form_route: 'injection',
+  strengths: [ ratio('1000 мг/4 мл', [1000], 1000, 'мг', { value: 4, unit: 'мл' }) ],
+  volumes: [ { text: '4 мл', value: 4, unit: 'мл' } ],
+  pack_count: 3
+}],
   ['drops parenthesized active ingredient annotation with oral liquid dose', 'азилаб сусп.15мл №1 (азитромицин 100мг 5мл)', {
   trade_name_text: 'азилаб',
   dosage_form: 'suspension',
@@ -1047,7 +1094,7 @@ const measurementAndRouteCases = [
   pack_count: 10
 }],
   ['drops abbreviated inner-use route from trade name', 'Д-Вит Ламира 400МЕ р-р.д/прием.внут.масл.10мл №1', {
-  trade_name_text: 'д-вит ламира масл',
+  trade_name_text: 'д-вит ламира',
   dosage_form: 'solution',
   strengths: [ratio('400 ме/мл', [400], 400, 'ме', { value: null, unit: 'мл' })],
   volumes: [ { text: '10 мл', value: 10, unit: 'мл' } ],
@@ -1196,6 +1243,16 @@ test('normalizes common genitive and spelling-variant trade tokens', () => {
         trade_name_text: 'боро плюс софт',
         trade_name_tokens: ['боро', 'плюс', 'софт'],
         dosage_form: 'cream',
+        volumes: [volume('100 мл', 100, 'мл')],
+      },
+    },
+  });
+
+  assertParsedCase({
+    query: 'Хилак форте капли д/приема внутрь 100мл***',
+    expected: {
+      attributes: {
+        dosage_form: 'drops',
         volumes: [volume('100 мл', 100, 'мл')],
       },
     },
