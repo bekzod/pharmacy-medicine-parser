@@ -433,6 +433,19 @@ const deviceAndProductTypeCases = [
 ];
 
 const measurementAndRouteCases = [
+  ['splits compact unit after slash in shared-unit strengths', 'Панангин таб.158 /140мг N60', {
+  trade_name_text: 'панангин',
+  dosage_form: 'tablet',
+  strengths: [ { kind: 'simple', text: '158 мг/140 мг', values: [ 158, 140 ], value: null, unit: 'мг' } ],
+  pack_count: 60
+}],
+  ['keeps pure inhalation solution listings as inhalers', 'Нубетал р-р д/ингаляций 0,1% 2,5мл №10 (Сальбутамол)', {
+  trade_name_text: 'нубетал',
+  dosage_form: 'inhaler',
+  strengths: [ { kind: 'simple', text: '0.1%', values: [ 0.1 ], value: 0.1, unit: '%' } ],
+  volumes: [ { text: '2.5 мл', value: 2.5, unit: 'мл' } ],
+  pack_count: 10
+}],
   ['parses strength before slash pack marker', 'СЕМАЛОНГ (СЕМАГЛУТИД) 0,5 р-р д/п-го 0,5мг/№1 шприц-ручка', {
   trade_name_text: 'семалонг',
   dosage_form: 'injection',

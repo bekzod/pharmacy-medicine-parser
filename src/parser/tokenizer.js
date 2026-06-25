@@ -197,10 +197,36 @@ function inferBareKapDosageForm(tokens, index, packCount) {
 function tokenizeNormalizedQuery(normalizedText) {
   if (!normalizedText) return [];
 
-  const tokens = [...normalizedText.matchAll(TOKEN_RE)].map((match) => {
+  const tokens = [...normalizedText.matchAll(TOKEN_RE)].flatMap((match) => {
     const value = match[0];
     const start = match.index || 0;
     const end = start + value.length;
+
+    const compactMeasurement = value.match(/^(\d+(?:\.\d+)?)([a-zа-яё]+)$/iu);
+    if (compactMeasurement) {
+      const unit = normalizeMedicineToken(compactMeasurement[2]);
+      if (MEDICINE_UNIT_TOKENS.has(unit)) {
+        const numberValue = compactMeasurement[1];
+        return [
+          {
+            type: 'NUMBER',
+            value: numberValue,
+            normalizedValue: numberValue,
+            numericValue: Number.parseFloat(numberValue),
+            start,
+            end: start + numberValue.length,
+          },
+          {
+            type: 'UNIT',
+            value: compactMeasurement[2],
+            normalizedValue: unit,
+            unitFamily: UNIT_FAMILY_BY_VALUE.get(unit) || 'other',
+            start: start + numberValue.length,
+            end,
+          },
+        ];
+      }
+    }
 
     if (value === '%') {
       return { type: 'PERCENT', value, normalizedValue: value, start, end };
