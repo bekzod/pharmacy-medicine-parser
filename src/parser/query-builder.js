@@ -687,6 +687,7 @@ function buildScoreExpression(context) {
     ? `GREATEST(${tradeNameSimilarityExpression}, coalesce(${nameSimilarityExpression}, 0))`
     : tradeNameSimilarityExpression;
   const scoreParts = [...TRADE_NAME_SCORE_PARTS[searchMode]];
+  scoreParts.push(`CASE WHEN ${normalizedTradeNameExpr} = :tradeNameQuery THEN 0.05 ELSE 0 END`);
 
   if (tradeNameTokenKeys.length) {
     const tokenLikeExprs = brandOnlySearch

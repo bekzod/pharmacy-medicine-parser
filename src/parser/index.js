@@ -505,12 +505,49 @@ function convertMassStrengthsToPerDoseWhenExplicit(tokens, state) {
   }
 }
 
+function convertInjectableOmittedMassSlashVolume(state, dosageFormRoute) {
+  const isInjectableContext = state.dosageForm === 'injection' || dosageFormRoute === 'injection';
+  if (!isInjectableContext || state.strengthCandidates.length > 0) return;
+
+  const malformedVolumeIndex = state.volumeCandidates.findIndex(
+    (v) =>
+      v?.unit === 'мл' &&
+      v.value == null &&
+      /^(\d+(?:\.\d+)?) мл\/(\d+(?:\.\d+)?) мл$/u.test(v.text || ''),
+  );
+  if (malformedVolumeIndex === -1) return;
+
+  const malformedVolume = state.volumeCandidates[malformedVolumeIndex];
+  const match = malformedVolume.text.match(/^(\d+(?:\.\d+)?) мл\/(\d+(?:\.\d+)?) мл$/u);
+  const strengthValue = Number(match[1]);
+  const volumeValue = Number(match[2]);
+  if (!Number.isFinite(strengthValue) || strengthValue < 100 || !Number.isFinite(volumeValue)) return;
+
+  state.addStrength(
+    buildRatioStrengthNode(
+      [strengthValue],
+      'мг',
+      { value: volumeValue, unit: 'мл' },
+      malformedVolume.startIndex,
+      malformedVolume.endIndex,
+    ),
+  );
+  state.volumeCandidates[malformedVolumeIndex] = {
+    text: `${volumeValue} мл`,
+    value: volumeValue,
+    unit: 'мл',
+    startIndex: malformedVolume.startIndex,
+    endIndex: malformedVolume.endIndex,
+  };
+}
+
 function runStrengthVolumePostProcessing({ state, tokens, rawQuery, normalizedText }) {
   promoteStandalonePackageMasses(state);
   inferInjectionFromDoseRatio(state);
   removeSolventCandidatesAndClause(state, tokens);
   convertSyringeDoseStrengths(state, rawQuery, normalizedText);
   convertMassStrengthsToPerDoseWhenExplicit(tokens, state);
+  convertInjectableOmittedMassSlashVolume(state, detectDosageFormRoute(rawQuery));
 }
 
 function maybePromoteInjectableDenominatorVolumes(state, dosageFormRoute) {
