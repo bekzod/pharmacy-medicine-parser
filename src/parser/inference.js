@@ -258,7 +258,14 @@ const ORAL_SOLID_TRADES_WITH_SLASH_IMPLICIT_MG = new Set([
   'ситадиаб',
 ]);
 const ORAL_SOLID_TRADES_WITH_IMPLICIT_MG = new Set(['йодомиг', 'сиофор']);
-const ORAL_SOLID_TRADES_WITH_IMPLICIT_G = new Set(['ампициллин']);
+const ORAL_SOLID_TRADES_WITH_IMPLICIT_G = new Set([
+  'ацикловир',
+  'аллапинин',
+  'амоксициллин',
+  'ампициллин',
+  'диазолин',
+]);
+const RATIO_TRADES_WITH_IMPLICIT_G = new Set(['l-виава']);
 const POWDER_TRADES_WITH_IMPLICIT_MG = new Set(['ноофен']);
 const ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG = new Set(['йодомарин']);
 // L-тироксин tablets are conventionally listed in micrograms.
@@ -404,6 +411,71 @@ function maybeInferOralSolidStrength({ state, tradeNameTokens }) {
   dropPromotedTradeNameValues(tradeNameTokens, [tokens[strengthIndex].value]);
 }
 
+function fixExplicitOralSolidGramShorthand({ state, tradeNameTokens }) {
+  if (!tradeNameTokensInclude(tradeNameTokens, ORAL_SOLID_TRADES_WITH_IMPLICIT_G)) return;
+  if (state.dosageForm && !ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(state.dosageForm)) return;
+  if (!state.dosageForm && state.packCount == null) return;
+
+  for (let index = 0; index < state.strengthCandidates.length; index += 1) {
+    const strength = state.strengthCandidates[index];
+    if (strength?.kind !== 'simple' || strength.unit !== 'мг') continue;
+    if (!Number.isFinite(strength.value) || strength.value <= 0 || strength.value >= 1) continue;
+    state.replaceStrength(
+      index,
+      buildSimpleStrengthNode(strength.values, 'г', strength.startIndex, strength.endIndex),
+    );
+  }
+}
+
+function fixExplicitRatioGramShorthand({ state, tradeNameTokens }) {
+  if (!tradeNameTokensInclude(tradeNameTokens, RATIO_TRADES_WITH_IMPLICIT_G)) return;
+
+  for (let index = 0; index < state.strengthCandidates.length; index += 1) {
+    const strength = state.strengthCandidates[index];
+    if (strength?.kind !== 'ratio' || strength.unit !== 'мг') continue;
+    if (strength.denominator?.unit !== 'мл') continue;
+    if (!Number.isFinite(strength.value) || strength.value <= 0 || strength.value > 1) continue;
+    state.replaceStrength(
+      index,
+      buildRatioStrengthNode(
+        strength.values,
+        'г',
+        strength.denominator,
+        strength.startIndex,
+        strength.endIndex,
+      ),
+    );
+  }
+}
+
+function maybeInferInjectableSpacedDoseRatio({ state, dosageFormRoute }) {
+  if (dosageFormRoute !== 'injection') return;
+  if (state.dosageForm === 'powder') return;
+  const strengthIndex = state.strengthCandidates.findIndex(
+    (strength) =>
+      strength?.kind === 'simple' &&
+      MASS_UNITS_FOR_DOSE_INFERENCE.has(strength.unit) &&
+      strength.value != null,
+  );
+  if (strengthIndex === -1) return;
+  const strength = state.strengthCandidates[strengthIndex];
+  const volume = state.volumeCandidates.find(
+    (candidate) => candidate?.unit === 'мл' && candidate.startIndex === strength.endIndex + 1,
+  );
+  if (!volume) return;
+
+  state.replaceStrength(
+    strengthIndex,
+    buildRatioStrengthNode(
+      strength.values,
+      strength.unit,
+      { value: volume.value, unit: volume.unit },
+      strength.startIndex,
+      volume.endIndex,
+    ),
+  );
+}
+
 function maybeInferTrailingOralSolidPackCount({ state, tradeNameTokens }) {
   const { tokens, dosageForm } = state;
   if (state.packCount != null) return null;
@@ -536,12 +608,29 @@ function maybeInferConcentratePerMlStrength({ state, rawQuery, dosageFormRoute }
   const strengthIndex = state.strengthCandidates.indexOf(strength);
   if (strengthIndex === -1) return;
 
+  const slashToken = state.tokens[adjacentMlVolume.endIndex + 1];
+  const repeatedMlVolume = state.volumeCandidates.find(
+    (volume) =>
+      volume !== adjacentMlVolume &&
+      volume?.unit === 'мл' &&
+      volume.value === adjacentMlVolume.value &&
+      volume.startIndex === adjacentMlVolume.endIndex + 2,
+  );
+  const denominator =
+    slashToken?.type === 'SLASH' && repeatedMlVolume
+      ? { value: adjacentMlVolume.value, unit: 'мл' }
+      : { value: null, unit: 'мл' };
+  if (repeatedMlVolume) {
+    adjacentMlVolume.packageVolume = true;
+    repeatedMlVolume.packageVolume = true;
+  }
+
   state.replaceStrength(
     strengthIndex,
     buildRatioStrengthNode(
       strength.values,
       strength.unit,
-      { value: null, unit: 'мл' },
+      denominator,
       strength.startIndex,
       strength.endIndex,
     ),
@@ -622,6 +711,9 @@ module.exports = {
   maybeInferEnzymeActivityStrength,
   ORAL_SOLID_FORMS_WITH_IMPLICIT_MG,
   maybeInferOralSolidStrength,
+  fixExplicitOralSolidGramShorthand,
+  fixExplicitRatioGramShorthand,
+  maybeInferInjectableSpacedDoseRatio,
   maybeInferTrailingOralSolidPackCount,
   maybeInferLiquidPackageVolume,
   maybeInferPowderGramStrength,

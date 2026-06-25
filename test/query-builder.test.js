@@ -199,3 +199,17 @@ test('strict pack-one recall admits null pack for standalone mass products', () 
     'expected pack-one standalone mass products to admit null pack',
   );
 });
+
+test('strict pack-one recall admits null pack for metered sprays', () => {
+  const parsed = parseMedicineQuery('Момефин спрей назаль 0,5мг 120доз 12мл №1');
+  const searchQuery = buildMedicineSearchQuery(parsed, {
+    limit: 5,
+    requireParsedAttributeMatch: true,
+    strictParsedAttributeFilters: true,
+  });
+
+  assert.ok(
+    searchQuery.sql.includes('(m.pack = :packCount OR m.pack IS NULL)'),
+    'expected pack-one metered sprays to admit null pack',
+  );
+});

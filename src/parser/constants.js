@@ -65,6 +65,8 @@ const PARSER_NOISE_TOKENS = new Set([
   'приема',
   'прием',
   'внутрь',
+  'сосуд',
+  'внутр-полост',
   'предварительно',
   'преднаполненный',
   'преднаполненные',
@@ -310,9 +312,11 @@ const RP = String.raw`р\s*[-/]\s*р`;
 const DOSAGE_FORM_ROUTE_PATTERNS = [
   { route: 'rectal', pattern: /(?<![а-я])рект[а-я]*\.?/iu },
   { route: 'vaginal', pattern: /(?<![а-я])ваг(?:ин[а-я]*)?\.?/iu },
+  { route: 'injection', pattern: /д\s*\/\s*внут\.?\s*в\s*[-/]\s*м\.?\s*введ/iu },
+  { route: 'injection', pattern: /д\s*\/\s*внут\.?\s*введ/iu },
   { route: 'oral', pattern: /для\s+приема\s+внутрь/iu },
   { route: 'oral', pattern: /(?:д\s*\/\s*)?при[её](?:м)?[а-я.]*[\s.]+внутрь/iu },
-  { route: 'oral', pattern: /д\s*\/\s*вн(?:утрь)?\.?/iu },
+  { route: 'oral', pattern: /д\s*\/\s*вн(?:утрь)?\.?(?![а-я])/iu },
   { route: 'infusion', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*инф[а-я]*\\.?`, 'iu') },
   { route: 'infusion', pattern: new RegExp(`${RP}\\.?\\s*для\\s*\\/?\\s*инф[а-я]*\\.?`, 'iu') },
   { route: 'infusion', pattern: new RegExp(`${RP}\\.?\\s*инф[а-я]*\\.?`, 'iu') },
@@ -321,6 +325,7 @@ const DOSAGE_FORM_ROUTE_PATTERNS = [
   { route: 'infusion', pattern: /(?<![а-я])инфуз(?!иол)[а-я]*/iu },
   // Negative lookahead must exclude "инф" (infusion) AND "инг" (inhalation)
   // so neither route gets misclassified as injection.
+  { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*и\\.?`, 'iu') },
   { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*ин(?![фг])[а-я]*\\.?`, 'iu') },
   { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*в\\.?\\s*в\\.?`, 'iu') },
   { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*п\\s*\\/\\s*к`, 'iu') },
