@@ -72,6 +72,7 @@ const MEDICINE_DOSAGE_FORMS = [
   {
     form: 'injection',
     parsePatterns: [
+      /р\s*-\s*р\.?\s*д\s*\/\s*и\.?/iu,
       /р\s*-\s*р\.?\s*д\s*\/\s*ин\.?/iu,
       /р\s*-\s*р\.?\s*д\s*\/\s*в\.?\s*в\.?/iu,
       /р\s*-\s*р\.?\s*д\s*\/\s*п\s*\/\s*к\.?\s*ин\.?/iu,
@@ -84,6 +85,7 @@ const MEDICINE_DOSAGE_FORMS = [
       /д\/ин[ъь]?екц/iu,
       /д\/ин\./iu,
       /д\/в\.?в\.?\s*введ/iu,
+      /д\s*\/\s*внут\.?\s*введ/iu,
     ],
     profile: {
       token: 'амп',
@@ -98,7 +100,7 @@ const MEDICINE_DOSAGE_FORMS = [
       /раствор/iu,
       wholeToken('конц\\.?'),
       /концентрат/iu,
-      /р\s*-\s*р\.?\s*д\s*\/\s*внутр(?:ь|\.?)/iu,
+      /р\s*-\s*р\.?\s*д\s*\/\s*внутр(?:ь|\.(?!\s*введ)|$)/iu,
       /р\s*-\s*р\.?\s*д\s*\/\s*пр\.?\s*внутр(?:ь|\.?)/iu,
       /р\s*-\s*р\.?\s*орал\.?/iu,
       wholeToken('флак\\.?'),
@@ -118,11 +120,11 @@ const MEDICINE_DOSAGE_FORMS = [
   },
   {
     form: 'suspension',
-    parsePatterns: [wholeToken('сусп\\.?'), /суспензи/iu, wholeToken('суспенз\\.?')],
+    parsePatterns: [wholeToken('сус\\.?'), wholeToken('сусп\\.?'), /суспензи/iu, wholeToken('суспенз\\.?')],
     profile: {
       token: 'сусп',
       priority: 4,
-      tokenPatterns: [/^(сусп\.?|суспенз[а-я]*|suspension)$/u],
+      tokenPatterns: [/^(сус\.?|сусп\.?|суспенз[а-я]*|suspension)$/u],
     },
   },
   {

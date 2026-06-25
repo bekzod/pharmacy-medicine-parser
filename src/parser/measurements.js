@@ -363,6 +363,9 @@ function toPublicMeasurementNode(measurement) {
   if (measurement.dimension2) {
     node.dimension2 = measurement.dimension2;
   }
+  if (measurement.packageVolume) {
+    node.packageVolume = true;
+  }
 
   return node;
 }
@@ -552,6 +555,153 @@ function simplifyInhalationDoseRatios(strengths, volumes, dosageForm) {
   return { strengths: newStrengths, volumes: newVolumes };
 }
 
+function inferOralLiquidVolumeFromDoseCount(strengths, volumes, dosageForm) {
+  if (dosageForm !== 'suspension' && dosageForm !== 'syrup') return volumes;
+
+  const doseVolume = (volumes || []).find(
+    (volume) =>
+      volume?.unit === 'доз' &&
+      Number.isFinite(Number(volume.value)) &&
+      Number(volume.value) > 1,
+  );
+  const perDoseStrength = (strengths || []).find(
+    (strength) =>
+      strength?.kind === 'ratio' &&
+      strength.denominator?.unit === 'мл' &&
+      Number.isFinite(Number(strength.denominator.value)) &&
+      Number(strength.denominator.value) > 0,
+  );
+  if (!doseVolume || !perDoseStrength) return volumes;
+
+  const packageMl = Number(doseVolume.value) * Number(perDoseStrength.denominator.value);
+  return [
+    ...(volumes || []).filter((volume) => volume !== doseVolume),
+    {
+      text: `${formatNormalizedNumber(packageMl)} мл`,
+      value: packageMl,
+      unit: 'мл',
+      packageVolume: true,
+    },
+  ];
+}
+
+function splitTopicalPackageMassRatios(strengths, volumes, dosageForm) {
+  if (!['cream', 'ointment', 'gel', 'paste'].includes(dosageForm)) {
+    return { strengths, volumes };
+  }
+
+  const nextStrengths = [];
+  const nextVolumes = [...(volumes || [])];
+  for (const strength of strengths || []) {
+    const denominator = strength?.denominator;
+    const denominatorValue = Number(denominator?.value);
+    if (
+      strength?.kind !== 'ratio' ||
+      denominator?.unit !== 'г' ||
+      !Number.isFinite(denominatorValue) ||
+      denominatorValue < 5
+    ) {
+      nextStrengths.push(strength);
+      continue;
+    }
+
+    nextStrengths.push({
+      ...strength,
+      text: `${formatNormalizedNumber(strength.value)} ${strength.unit}/г`,
+      denominator: { value: null, unit: 'г' },
+    });
+    nextVolumes.push({
+      text: `${formatNormalizedNumber(denominatorValue)} г`,
+      value: denominatorValue,
+      unit: 'г',
+      packageVolume: true,
+    });
+  }
+  return { strengths: nextStrengths, volumes: nextVolumes };
+}
+
+function inferDropsMassPackageRatio(strengths, volumes, dosageForm) {
+  if (dosageForm !== 'drops') return { strengths, volumes };
+
+  const packageMass = (volumes || []).find(
+    (volume) => volume?.unit === 'г' && Number.isFinite(Number(volume.value)) && volume.value >= 1,
+  );
+  if (!packageMass) return { strengths, volumes };
+
+  let inferredRatio = false;
+  const nextStrengths = (strengths || []).map((strength) => {
+      const components = strength?.components || [];
+      const unit = components[0]?.unit;
+      if (
+        strength?.kind !== 'combination' ||
+        components.length < 2 ||
+        !['мг', 'мкг', 'г'].includes(unit) ||
+        !components.every(
+          (component) => component.unit === unit && Number.isFinite(Number(component.value)),
+        )
+      ) {
+        return strength;
+      }
+
+      inferredRatio = true;
+      const values = components.map((component) => Number(component.value));
+      return {
+        kind: 'ratio',
+        text: `${values.map(formatNormalizedNumber).join('/')} ${unit}/г`,
+        values,
+        value: null,
+        unit,
+        denominator: { value: null, unit: 'г' },
+      };
+    });
+
+  return {
+    strengths: nextStrengths,
+    volumes: inferredRatio
+      ? (volumes || []).map((volume) =>
+          volume === packageMass ? { ...volume, packageVolume: true } : volume,
+        )
+      : volumes,
+  };
+}
+
+function inferMeteredDoseStrengths(strengths, volumes, dosageForm) {
+  if (dosageForm !== 'aerosol' && dosageForm !== 'inhaler' && dosageForm !== 'spray') {
+    return { strengths, volumes };
+  }
+
+  const doseVolume = (volumes || []).find(
+    (volume) =>
+      volume?.unit === 'доз' &&
+      Number.isFinite(Number(volume.value)) &&
+      Number(volume.value) > 1,
+  );
+  if (!doseVolume) return { strengths, volumes };
+
+  const simpleStrengths = (strengths || []).filter(
+    (strength) =>
+      strength?.kind === 'simple' &&
+      strength.value != null &&
+      ['мг', 'мкг'].includes(String(strength.unit || '').toLowerCase()),
+  );
+  if (simpleStrengths.length !== 1) return { strengths, volumes };
+
+  const strengthToConvert = simpleStrengths[0];
+  return {
+    strengths: (strengths || []).map((strength) =>
+      strength === strengthToConvert
+        ? {
+            ...strength,
+            kind: 'ratio',
+            text: `${formatNormalizedNumber(strength.value)} ${strength.unit}/доз`,
+            denominator: { value: null, unit: 'доз' },
+          }
+        : strength,
+    ),
+    volumes,
+  };
+}
+
 module.exports = {
   buildMeasurementNode,
   buildMeasurementNodeFromStrength,
@@ -573,4 +723,8 @@ module.exports = {
   mergeSameUnitSlashStrength,
   inferInhalationPerDoseStrengths,
   simplifyInhalationDoseRatios,
+  inferOralLiquidVolumeFromDoseCount,
+  splitTopicalPackageMassRatios,
+  inferDropsMassPackageRatio,
+  inferMeteredDoseStrengths,
 };

@@ -28,9 +28,13 @@ const {
   buildStrengthNode,
   dedupePublicNodes,
   inferInhalationPerDoseStrengths,
+  inferDropsMassPackageRatio,
+  inferMeteredDoseStrengths,
+  inferOralLiquidVolumeFromDoseCount,
   isDuplicateTotalStrengthMarker,
   mergeSameUnitSlashStrength,
   simplifyInhalationDoseRatios,
+  splitTopicalPackageMassRatios,
   toPublicMeasurementNode,
   toPublicStrengthNode,
 } = require('./measurements');
@@ -42,11 +46,14 @@ const {
   hasRepeatedStrengthNumberLater,
   inferMultiValuePerDoseStrength,
   inferOralRouteFromLiquidDose,
+  fixExplicitOralSolidGramShorthand,
+  fixExplicitRatioGramShorthand,
   isSolventVolumeCandidate,
   maybeInferEnzymeActivityStrength,
   maybeInferLiquidPackageVolume,
   maybeInferOralLiquidSpacedDoseRatio,
   maybeInferOralSolidStrength,
+  maybeInferInjectableSpacedDoseRatio,
   maybeInferPowderGramStrength,
   maybeInferPowderMilligramStrength,
   maybeInferConcentratePerMlStrength,
@@ -67,7 +74,7 @@ const {
 const { ParseState } = require('./state');
 
 const PRECISE_STRENGTH_UNITS = new Set(['мг', 'мкг', '%']);
-const TOPICAL_PACKAGE_FORMS = new Set(['cream', 'ointment', 'gel', 'paste']);
+const MASS_PACKAGE_FORMS = new Set(['cream', 'ointment', 'gel', 'paste', 'drops']);
 const DOSE_UNITS = new Set(['ед', 'ме']);
 const MASS_STRENGTH_UNITS = new Set(['мкг', 'мг', 'г']);
 
@@ -391,8 +398,8 @@ function promoteStandalonePackageMasses(state) {
       (s.kind === 'simple' && PRECISE_STRENGTH_UNITS.has(s.unit)) ||
       (s.kind === 'combination' && s.components?.some((c) => PRECISE_STRENGTH_UNITS.has(c.unit))),
   );
-  const isTopicalForm = TOPICAL_PACKAGE_FORMS.has(state.dosageForm);
-  if (!hasPreciserStrength && !isTopicalForm) return;
+  const hasMassPackageForm = MASS_PACKAGE_FORMS.has(state.dosageForm);
+  if (!hasPreciserStrength && !hasMassPackageForm) return;
 
   for (let i = state.strengthCandidates.length - 1; i >= 0; i -= 1) {
     const s = state.strengthCandidates[i];
@@ -649,6 +656,8 @@ function runInferencePipeline({ state, rawQuery, normalizedText, tradeNameTokens
   maybeInferVitaminDStrength({ state, tradeNameTokens });
   maybeInferEnzymeActivityStrength({ state, tradeNameTokens });
   maybeInferOralSolidStrength({ state, tradeNameTokens });
+  fixExplicitOralSolidGramShorthand({ state, tradeNameTokens });
+  fixExplicitRatioGramShorthand({ state, tradeNameTokens });
 
   const inferredTrailingPackCount = maybeInferTrailingOralSolidPackCount({ state, tradeNameTokens });
   if (inferredTrailingPackCount != null) state.setPackCount(inferredTrailingPackCount);
@@ -658,6 +667,7 @@ function runInferencePipeline({ state, rawQuery, normalizedText, tradeNameTokens
   const dosageFormRoute =
     detectDosageFormRoute(rawQuery)
     || inferOralRouteFromLiquidDose(state.dosageForm, state.strengthCandidates);
+  maybeInferInjectableSpacedDoseRatio({ state, dosageFormRoute });
 
   maybeInferPowderMilligramStrength({ state, dosageFormRoute, tradeNameTokens });
   maybeInferPowderGramStrength({ state, tradeNameTokens });
@@ -686,7 +696,11 @@ function buildPublicMeasurements(state, normalizedText) {
   let volumes = dedupePublicNodes(
     state.volumeCandidates.map(toPublicMeasurementNode).filter(Boolean),
   );
+  ({ strengths, volumes } = splitTopicalPackageMassRatios(strengths, volumes, state.dosageForm));
+  ({ strengths, volumes } = inferDropsMassPackageRatio(strengths, volumes, state.dosageForm));
+  ({ strengths, volumes } = inferMeteredDoseStrengths(strengths, volumes, state.dosageForm));
   ({ strengths, volumes } = simplifyInhalationDoseRatios(strengths, volumes, state.dosageForm));
+  volumes = inferOralLiquidVolumeFromDoseCount(strengths, volumes, state.dosageForm);
   volumes = dedupePublicNodes(volumes);
   return { strengths, volumes };
 }

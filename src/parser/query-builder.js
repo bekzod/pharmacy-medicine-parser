@@ -17,6 +17,9 @@ const PACK_ONE_NULL_COMPATIBLE_DOSAGE_FORMS = new Set([
   'solution',
   'suspension',
   'drops',
+  'spray',
+  'aerosol',
+  'inhaler',
   'enema',
   'cream',
   'ointment',
@@ -453,6 +456,7 @@ function buildStrictVolumeSearchTexts(volumes, strengths) {
   return buildVolumeSearchTexts(
     (volumes || []).filter(
       (volume) =>
+        volume?.packageVolume ||
         !ratioDenominators.some(
           (denominator) =>
             unitValuesMatch(volume, denominator) ||

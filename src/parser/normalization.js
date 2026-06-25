@@ -199,9 +199,17 @@ function normalizeMedicineQuery(rawQuery) {
     .replace(/(\d),(\d)/gu, '$1.$2')
     .replace(/(?<=\d)['’](?=\d{3}(?!\d))/gu, '')
     .replace(/(\d+(?:\.\d+)?(?:мкг|мг|мл|кг|г|л|ме|ед))_(?=\d)/giu, '$1/')
+    .replace(
+      /(\d+(?:\.\d+)?)(мкг|мг|г)\s*\/\s*(\d+(?:\.\d+)?)\2\s+\3\s*мл/giu,
+      '$1$2/$3мл',
+    )
     .replace(/(\d+(?:\.\d+)?)(мкг|мг|мл|кг|г|л|ме|ед|%)\s*\/\s*№(?=\s*\d)/giu, '$1 $2 №')
     .replace(/(\d+(?:\.\d+)?)(мкг|мг)\s*\/\s*(?:д|доз)(?![\p{L}\d])/giu, '$1 $2/доз')
     .replace(/(\d+(?:\.\d+)?)(мкг|мг)\s*\/\s*(\d+)(?![.\p{L}\d])/giu, '$1 $2/$3 доз')
+    .replace(/капли\s+в\s+нос/giu, 'капли')
+    .replace(/д\s*\/\s*внутр[-\s]*сосуд[а-я]*[.\s-]*внутр[-\s]*полост[а-я]*[.\s-]*введ\.?/giu, ' ')
+    .replace(/д\s*\/\s*внут\.?\s*в\s*[-/]\s*м\.?\s*введ\.?/giu, ' ')
+    .replace(/д\s*\/\s*при[её]м\.?\s*внут(?:рь?)?\.?/giu, ' ')
     .replace(/д\s*\/\s*п(?!риг)(?:-?го)?/giu, ' ')
     .replace(/(р\s*[-/]\s*р)(?=\d)/giu, '$1 ')
     .replace(/(\d)(мкг|мг|мл|кг|г|л|ме|ед)\s*\/\s+(?=\d)/giu, '$1$2/')
@@ -226,6 +234,8 @@ function normalizeMedicineQuery(rawQuery) {
     .replace(/(?<![а-яёa-z0-9])н\s*\/\s*с(?![а-яёa-z0-9])/giu, ' нестер ')
     .replace(/[,:;!?()[\]{}"'`«»]+/gu, ' ')
     .replace(/(?<!\d)\.(?!\d)/gu, ' ')
+    .replace(/(?<![\p{L}\d])карри\s+ф\s+а(?![\p{L}\d])/giu, 'carry f a')
+    .replace(/д\s*\/\s*при[её]м\s+внут(?:рь?)?/giu, ' ')
     .replace(/(?<=\p{L})\.(?=\d)/gu, ' ')
     // Split Cyrillic-letter\u2192digit boundaries (e.g. "\u043a\u0440\u0435\u043c15\u0433" \u2192 "\u043a\u0440\u0435\u043c 15\u0433") so
     // glued dosage forms / measurements get tokenized. Skip the boundary when
@@ -238,6 +248,7 @@ function normalizeMedicineQuery(rawQuery) {
     // letters before the hyphen and \u22652 digits after to preserve ingredient/
     // vitamin patterns like "\u0414-3", "\u0412-12", "\u03c9-3", "\u043e\u043c\u0435\u0433\u0430-3".
     .replace(/([\p{L}]{4,})-(\d{2,})(?![\p{L}\d])/gu, '$1 $2')
+    .replace(/([\p{L}]{4,})-кап(?=\s*\.?\s*(?:глаз|уш|наз))/giu, '$1 кап')
     .replace(/(?<![\p{L}\d])[hн](\d+(?:\.\d+)?)(?=\s*(?:мг|мкг|г|%)(?![\p{L}\d]))/giu, '$1')
     // Expand pharmacy "<digits>\u0414" abbreviation to "<digits> \u0434\u043e\u0437" (e.g.
     // "200\u0414" \u2192 "200 \u0434\u043e\u0437" for inhalers/aerosols). Negative lookahead avoids
