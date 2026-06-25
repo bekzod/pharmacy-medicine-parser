@@ -201,6 +201,7 @@ function normalizeMedicineQuery(rawQuery) {
       ' ',
     )
     .replace(/(\d),(\d)/gu, '$1.$2')
+    .replace(/(\d+(?:\.\d+)?)\s*млн\.?\s*(ме|ед|iu)(?!\p{L})/giu, (_, value, unit) => `${Number(value) * 1000000} ${unit}`)
     .replace(/(?<=\d)['’](?=\d{3}(?!\d))/gu, '')
     .replace(/(\d+(?:\.\d+)?(?:мкг|мг|мл|кг|г|л|ме|ед))_(?=\d)/giu, '$1/')
     .replace(
@@ -219,7 +220,8 @@ function normalizeMedicineQuery(rawQuery) {
     .replace(/(\d)(мкг|мг|мл|кг|г|л|ме|ед)\s*\/\s+(?=\d)/giu, '$1$2/')
     .replace(/%[./]?(?=\d)/gu, '% ')
     .replace(/(мкг|мг|мл|кг|г|л|%)-(?=\d)/giu, '$1 ')
-    .replace(/(\d)\s*[х×x]\s*(\d)/gu, '$1x$2')
+    .replace(/(\d)\s*[х×x*]\s*(\d)/gu, '$1x$2')
+    .replace(/(\d+)\s*x\s*(\d+)(мм|см|м)(?!\p{L})/giu, '$1 $3 х $2 $3')
     .replace(/(?<![\p{L}\d])(\d{1,2})\s*g(?![\p{L}\d])/giu, '$1 g')
     .replace(
       /(\d+(?:\.\d+)?)(мм|см|м)\s*[*хx×]\s*(\d+(?:\.\d+)?)(мм|см|м)?/giu,

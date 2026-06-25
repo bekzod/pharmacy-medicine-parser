@@ -186,6 +186,12 @@ const implicitStrengthCases = [
   pack_count: 10,
   strengths: [simple('500000 ме', [500000], 500000, 'ме')]
 }],
+  ['parses million shorthand activity units', 'Виферон свечи 1 млн. МЕ №10', {
+  trade_name_text: 'виферон',
+  dosage_form: 'suppository',
+  pack_count: 10,
+  strengths: [simple('1000000 ме', [1000000], 1000000, 'ме')]
+}],
   ['parses compact anti-Xa dot activity strength', 'Велвин-4000 анти-Ха.МЕ/0,4мл №10 (Эноксапарин натрия)', {
   trade_name_text: 'велвин',
   pack_count: 10,
@@ -518,6 +524,11 @@ const measurementAndRouteCases = [
     options: { limit: 5 },
     sqlIncludes: [ 'CASE WHEN m.trade_name = :tradeNameQuery THEN 0.05 ELSE 0 END' ]
   }
+}],
+  ['parses compact patch dimensions with right-side unit', 'Лейкопластырь тканевой Fum Plast 5*500см', {
+  trade_name_text: 'тканевой fum plast',
+  dosage_form: 'patch',
+  volumes: [volume('5 см х 500 см', 5, 'см', { dimension2: { value: 500, unit: 'см' } })]
 }],
   ['treats gram-packaged combination drops as per-gram strength', 'Фелисанс уш.капли 40мг+10мг 16г №1', {
   trade_name_text: 'фелисанс',
