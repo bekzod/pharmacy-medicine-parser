@@ -57,15 +57,14 @@ function maybeInferOralLiquidSpacedDoseRatio({ state }) {
     if (volumeIndex === -1) continue;
 
     const denominatorVolume = volumeCandidates[volumeIndex];
-    state.replaceStrength(
+    replaceRatioStrength(
+      state,
       strengthIndex,
-      buildRatioStrengthNode(
-        strength.values,
-        strength.unit,
-        { value: denominatorVolume.value, unit: denominatorVolume.unit },
-        strength.startIndex,
-        denominatorVolume.endIndex,
-      ),
+      strength,
+      {
+        denominator: { value: denominatorVolume.value, unit: denominatorVolume.unit },
+        endIndex: denominatorVolume.endIndex,
+      },
     );
 
     for (let index = denominatorVolume.startIndex; index <= denominatorVolume.endIndex; index += 1) {
@@ -264,9 +263,14 @@ const ORAL_SOLID_TRADES_WITH_IMPLICIT_G = new Set([
   'амоксициллин',
   'ампициллин',
   'диазолин',
+  'дротаверин-лекхим',
+  'лоперамид',
 ]);
 const RATIO_TRADES_WITH_IMPLICIT_G = new Set(['l-виава']);
+const RATIO_TRADES_WITH_MG_TO_G = new Set(['ливерин', 'метакартин']);
+const RATIO_DENOMINATOR_AS_PACKAGE_VOLUME_TRADES = new Set(['метакартин']);
 const POWDER_TRADES_WITH_IMPLICIT_MG = new Set(['ноофен']);
+const INJECTABLE_SPACED_DOSE_RATIO_TRADES = new Set(['амбромер', 'эсфолип']);
 const ORAL_SOLID_TRADES_WITH_IMPLICIT_MCG = new Set(['йодомарин']);
 // L-тироксин tablets are conventionally listed in micrograms.
 const LEVOTHYROXINE_TABLET_TRADES = new Set(['l-тироксин']);
@@ -331,6 +335,50 @@ function dropPromotedTradeNameValues(tradeNameTokens, values) {
   for (let i = tradeNameTokens.length - 1; i >= 0; i -= 1) {
     if (promotedValues.has(String(tradeNameTokens[i]))) tradeNameTokens.splice(i, 1);
   }
+}
+
+function replaceSimpleStrengthUnit(state, index, strength, unit) {
+  state.replaceStrength(
+    index,
+    buildSimpleStrengthNode(strength.values, unit, strength.startIndex, strength.endIndex),
+  );
+}
+
+function replaceRatioStrength(
+  state,
+  index,
+  strength,
+  {
+    values = strength.values,
+    unit = strength.unit,
+    denominator = strength.denominator,
+    endIndex = strength.endIndex,
+  },
+) {
+  state.replaceStrength(
+    index,
+    buildRatioStrengthNode(values, unit, denominator, strength.startIndex, endIndex),
+  );
+}
+
+function addMissingMlVolume(state, strength, volumeValue) {
+  const value = Number(volumeValue);
+  if (!Number.isFinite(value)) return;
+  if (
+    state.volumeCandidates.some(
+      (volume) => volume?.unit === 'мл' && Number(volume.value) === value,
+    )
+  ) {
+    return;
+  }
+
+  state.addVolume({
+    text: `${value} мл`,
+    value,
+    unit: 'мл',
+    startIndex: strength.startIndex,
+    endIndex: strength.endIndex,
+  });
 }
 
 function findOralSolidStrengthRule({ dosageForm, packCount, tradeNameTokens }) {
@@ -420,10 +468,37 @@ function fixExplicitOralSolidGramShorthand({ state, tradeNameTokens }) {
     const strength = state.strengthCandidates[index];
     if (strength?.kind !== 'simple' || strength.unit !== 'мг') continue;
     if (!Number.isFinite(strength.value) || strength.value <= 0 || strength.value >= 1) continue;
-    state.replaceStrength(
-      index,
-      buildSimpleStrengthNode(strength.values, 'г', strength.startIndex, strength.endIndex),
-    );
+    replaceSimpleStrengthUnit(state, index, strength, 'г');
+  }
+}
+
+function hasRehydrationSaltTrade(tradeNameTokens) {
+  const tokens = (tradeNameTokens || []).map((token) =>
+    String(token || '').toLowerCase().replace(/ё/g, 'е'),
+  );
+  return (
+    tokens.includes('регидрационная') &&
+    tokens.some((token) => token === 'соль' || /^соль-l[рp]$/u.test(token))
+  );
+}
+
+function fixExplicitKnownGramUnitTypos({ state, tradeNameTokens }) {
+  const isGlycerinSuppository =
+    state.dosageForm === 'suppository' &&
+    tradeNameTokensInclude(tradeNameTokens, new Set(['глицерин']));
+  const isRehydrationSaltPacket = state.packCount != null && hasRehydrationSaltTrade(tradeNameTokens);
+
+  for (let index = 0; index < state.strengthCandidates.length; index += 1) {
+    const strength = state.strengthCandidates[index];
+    if (strength?.kind !== 'simple' || strength.unit !== 'мг') continue;
+    if (!Number.isFinite(strength.value) || strength.value <= 0) continue;
+
+    const shouldConvert =
+      (isGlycerinSuppository && strength.value < 3) ||
+      (isRehydrationSaltPacket && strength.value >= 10 && strength.value <= 30);
+    if (!shouldConvert) continue;
+
+    replaceSimpleStrengthUnit(state, index, strength, 'г');
   }
 }
 
@@ -435,21 +510,50 @@ function fixExplicitRatioGramShorthand({ state, tradeNameTokens }) {
     if (strength?.kind !== 'ratio' || strength.unit !== 'мг') continue;
     if (strength.denominator?.unit !== 'мл') continue;
     if (!Number.isFinite(strength.value) || strength.value <= 0 || strength.value > 1) continue;
-    state.replaceStrength(
-      index,
-      buildRatioStrengthNode(
-        strength.values,
-        'г',
-        strength.denominator,
-        strength.startIndex,
-        strength.endIndex,
-      ),
-    );
+    replaceRatioStrength(state, index, strength, { unit: 'г' });
   }
 }
 
-function maybeInferInjectableSpacedDoseRatio({ state, dosageFormRoute }) {
-  if (dosageFormRoute !== 'injection') return;
+function fixKnownRatioMgToGram({ state, tradeNameTokens }) {
+  if (!tradeNameTokensInclude(tradeNameTokens, RATIO_TRADES_WITH_MG_TO_G)) return;
+
+  for (let index = 0; index < state.strengthCandidates.length; index += 1) {
+    const strength = state.strengthCandidates[index];
+    if (strength?.kind !== 'ratio' || strength.unit !== 'мг') continue;
+    if (!Number.isFinite(strength.value) || strength.value < 500) continue;
+    const values = (strength.values || []).map((value) => Number(value) / 1000);
+    if (!values.every((value) => Number.isFinite(value) && value > 0)) continue;
+    replaceRatioStrength(state, index, strength, { values, unit: 'г' });
+  }
+}
+
+function maybeAddRatioDenominatorPackageVolume({ state, tradeNameTokens }) {
+  if (!tradeNameTokensInclude(tradeNameTokens, RATIO_DENOMINATOR_AS_PACKAGE_VOLUME_TRADES)) {
+    return;
+  }
+
+  for (const strength of state.strengthCandidates) {
+    const denominator = strength?.denominator;
+    if (
+      denominator?.unit !== 'мл' ||
+      !Number.isFinite(Number(denominator.value)) ||
+      Number(denominator.value) <= 0
+    ) {
+      continue;
+    }
+
+    const volumeValue = Number(denominator.value);
+    addMissingMlVolume(state, strength, volumeValue);
+  }
+}
+
+function maybeInferInjectableSpacedDoseRatio({ state, dosageFormRoute, tradeNameTokens }) {
+  if (
+    dosageFormRoute !== 'injection' &&
+    !tradeNameTokensInclude(tradeNameTokens, INJECTABLE_SPACED_DOSE_RATIO_TRADES)
+  ) {
+    return;
+  }
   if (state.dosageForm === 'powder') return;
   const strengthIndex = state.strengthCandidates.findIndex(
     (strength) =>
@@ -464,15 +568,14 @@ function maybeInferInjectableSpacedDoseRatio({ state, dosageFormRoute }) {
   );
   if (!volume) return;
 
-  state.replaceStrength(
+  replaceRatioStrength(
+    state,
     strengthIndex,
-    buildRatioStrengthNode(
-      strength.values,
-      strength.unit,
-      { value: volume.value, unit: volume.unit },
-      strength.startIndex,
-      volume.endIndex,
-    ),
+    strength,
+    {
+      denominator: { value: volume.value, unit: volume.unit },
+      endIndex: volume.endIndex,
+    },
   );
 }
 
@@ -586,10 +689,53 @@ function maybeInferPowderMilligramStrength({
 }
 
 const CONCENTRATE_RE = /(?<![а-яё])конц(?:\.|ентрат[а-я]*)?/iu;
+const PER_ML_PACKAGE_VOLUME_TRADES = new Set([
+  'диклион',
+  'левофлоксацин',
+  'самфлок',
+  'саргин',
+  'тазлион',
+  'тивамин',
+  'тивортин',
+  'тиопол',
+  'элванта',
+  'фторурацил',
+  'хондрогард',
+]);
+const PER_ML_DENOMINATOR_PACKAGE_TRADES = new Set([
+  'амброксол',
+  'барвитон',
+  'диклион',
+  'ингамист',
+  'инфенак',
+  'синалинат',
+  'тазлион',
+  'тарес',
+  'тивамин',
+  'тивортин',
+  'хондрогард',
+  'эллезиум',
+]);
+const PACKAGE_DENOMINATOR_PER_ML_TYPO_TRADES = new Set([
+  'цитиколин',
+  'цитиколин-lp',
+  'цитиколин-lр',
+]);
+const SOLUTION_MG_PER_G_DENOMINATOR_TO_ML_TRADES = new Set(['бетадин']);
 
-function maybeInferConcentratePerMlStrength({ state, rawQuery, dosageFormRoute }) {
-  if (!CONCENTRATE_RE.test(String(rawQuery || ''))) return;
-  if (dosageFormRoute !== 'infusion' && dosageFormRoute !== 'injection') return;
+function maybeInferConcentratePerMlStrength({ state, rawQuery, dosageFormRoute, tradeNameTokens }) {
+  const hasKnownPerMlTrade = tradeNameTokensInclude(
+    tradeNameTokens,
+    PER_ML_PACKAGE_VOLUME_TRADES,
+  );
+  if (!CONCENTRATE_RE.test(String(rawQuery || '')) && !hasKnownPerMlTrade) return;
+  if (
+    !hasKnownPerMlTrade &&
+    dosageFormRoute !== 'infusion' &&
+    dosageFormRoute !== 'injection'
+  ) {
+    return;
+  }
 
   const massStrengths = state.strengthCandidates.filter(
     (strength) =>
@@ -625,16 +771,85 @@ function maybeInferConcentratePerMlStrength({ state, rawQuery, dosageFormRoute }
     repeatedMlVolume.packageVolume = true;
   }
 
-  state.replaceStrength(
-    strengthIndex,
-    buildRatioStrengthNode(
-      strength.values,
-      strength.unit,
-      denominator,
-      strength.startIndex,
-      strength.endIndex,
-    ),
-  );
+  replaceRatioStrength(state, strengthIndex, strength, { denominator });
+}
+
+function maybeInferRatioDenominatorPackageVolume({ state, tradeNameTokens }) {
+  if (!tradeNameTokensInclude(tradeNameTokens, PER_ML_DENOMINATOR_PACKAGE_TRADES)) return;
+
+  for (let index = 0; index < state.strengthCandidates.length; index += 1) {
+    const strength = state.strengthCandidates[index];
+    if (
+      strength?.kind !== 'ratio' ||
+      strength.denominator?.unit !== 'мл' ||
+      strength.denominator?.value == null ||
+      !Number.isFinite(Number(strength.denominator.value)) ||
+      !MASS_UNITS_FOR_DOSE_INFERENCE.has(strength.unit)
+    ) {
+      continue;
+    }
+
+    const volumeValue = Number(strength.denominator.value);
+    addMissingMlVolume(state, strength, volumeValue);
+
+    replaceRatioStrength(state, index, strength, { denominator: { value: null, unit: 'мл' } });
+  }
+}
+
+function maybeInferPackageDenominatorPerMlTypo({ state, tradeNameTokens }) {
+  if (!tradeNameTokensInclude(tradeNameTokens, PACKAGE_DENOMINATOR_PER_ML_TYPO_TRADES)) {
+    return;
+  }
+
+  for (let index = 0; index < state.strengthCandidates.length; index += 1) {
+    const strength = state.strengthCandidates[index];
+    if (
+      strength?.kind !== 'ratio' ||
+      strength.denominator?.unit !== 'мл' ||
+      strength.denominator?.value != null ||
+      !MASS_UNITS_FOR_DOSE_INFERENCE.has(strength.unit) ||
+      !Number.isFinite(Number(strength.value)) ||
+      Number(strength.value) < 500
+    ) {
+      continue;
+    }
+
+    const packageVolume = state.volumeCandidates.find(
+      (volume) => volume?.unit === 'мл' && Number(volume.value) === 4,
+    );
+    if (!packageVolume) continue;
+
+    replaceRatioStrength(
+      state,
+      index,
+      strength,
+      {
+        denominator: { value: packageVolume.value, unit: packageVolume.unit },
+        endIndex: packageVolume.endIndex,
+      },
+    );
+  }
+}
+
+function fixSolutionPerGramDenominatorTypo({ state, tradeNameTokens }) {
+  if (state.dosageForm !== 'solution') return;
+  if (!tradeNameTokensInclude(tradeNameTokens, SOLUTION_MG_PER_G_DENOMINATOR_TO_ML_TRADES)) {
+    return;
+  }
+
+  for (let index = 0; index < state.strengthCandidates.length; index += 1) {
+    const strength = state.strengthCandidates[index];
+    if (
+      strength?.kind !== 'ratio' ||
+      strength.unit !== 'мг' ||
+      strength.denominator?.unit !== 'г' ||
+      strength.denominator?.value != null
+    ) {
+      continue;
+    }
+
+    replaceRatioStrength(state, index, strength, { denominator: { value: 1, unit: 'мл' } });
+  }
 }
 
 function hasRepeatedStrengthNumberLater(tokens, index) {
@@ -712,13 +927,19 @@ module.exports = {
   ORAL_SOLID_FORMS_WITH_IMPLICIT_MG,
   maybeInferOralSolidStrength,
   fixExplicitOralSolidGramShorthand,
+  fixExplicitKnownGramUnitTypos,
   fixExplicitRatioGramShorthand,
+  fixKnownRatioMgToGram,
+  maybeAddRatioDenominatorPackageVolume,
   maybeInferInjectableSpacedDoseRatio,
   maybeInferTrailingOralSolidPackCount,
   maybeInferLiquidPackageVolume,
   maybeInferPowderGramStrength,
   maybeInferPowderMilligramStrength,
   maybeInferConcentratePerMlStrength,
+  maybeInferPackageDenominatorPerMlTypo,
+  fixSolutionPerGramDenominatorTypo,
+  maybeInferRatioDenominatorPackageVolume,
   hasRepeatedStrengthNumberLater,
   hasPrefilledSyringeSignal,
   isSolventVolumeCandidate,

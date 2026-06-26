@@ -192,6 +192,12 @@ const implicitStrengthCases = [
   pack_count: 10,
   strengths: [simple('1000000 ме', [1000000], 1000000, 'ме')]
 }],
+  ['parses decimal million shorthand activity units', 'Виферон свечи 1,5 млн МЕ №10', {
+  trade_name_text: 'виферон',
+  dosage_form: 'suppository',
+  pack_count: 10,
+  strengths: [simple('1500000 ме', [1500000], 1500000, 'ме')]
+}],
   ['parses compact anti-Xa dot activity strength', 'Велвин-4000 анти-Ха.МЕ/0,4мл №10 (Эноксапарин натрия)', {
   trade_name_text: 'велвин',
   pack_count: 10,
@@ -214,6 +220,12 @@ const implicitStrengthCases = [
     simple('0.5 мг', [0.5], 0.5, 'мг'),
     simple('0.4 мг', [0.4], 0.4, 'мг')
   ]
+}],
+  ['treats oral solid slash ml as a mistyped mg strength', 'КО-ПРЕНЕССА ТАБ. 8МГ/2,5МЛ №30', {
+  trade_name_text: 'ко-пренесса',
+  dosage_form: 'tablet',
+  pack_count: 30,
+  strengths: [simple('8 мг/2.5 мг', [8, 2.5], null, 'мг')]
 }],
   ['infers low bare tablet strength for Olfrex', 'ОЛФРЕКС 5 ТАБ. №28', {
   trade_name_text: 'олфрекс',
@@ -298,11 +310,55 @@ const implicitStrengthCases = [
   strengths: [ { kind: 'simple', text: '0.1 г', values: [ 0.1 ], value: 0.1, unit: 'г' } ],
   pack_count: 10
 }],
+  ['treats explicit low mg tablet shorthand as grams for drotaverine rows', 'Дротаверин-Лекхим таб.0.04мг№30', {
+  trade_name_text: 'дротаверин-лекхим',
+  dosage_form: 'tablet',
+  strengths: [ { kind: 'simple', text: '0.04 г', values: [ 0.04 ], value: 0.04, unit: 'г' } ],
+  pack_count: 30
+}],
+  ['treats explicit low mg tablet shorthand as grams for loperamide rows', 'Лоперамид таб.0.002мг№20', {
+  trade_name_text: 'лоперамид',
+  dosage_form: 'tablet',
+  strengths: [ { kind: 'simple', text: '0.002 г', values: [ 0.002 ], value: 0.002, unit: 'г' } ],
+  pack_count: 20
+}],
+  ['treats glycerin suppository mg shorthand as grams', 'Глицерин супп.1.24мг№10', {
+  trade_name_text: 'глицерин',
+  dosage_form: 'suppository',
+  strengths: [ { kind: 'simple', text: '1.24 г', values: [ 1.24 ], value: 1.24, unit: 'г' } ],
+  pack_count: 10
+}],
+  ['treats rehydration salt packet mg shorthand as grams', 'Регидрационная соль-LP №10 18,9мг', {
+  trade_name_text: 'регидрационная соль-lр',
+  product_type: 'medicine',
+  strengths: [ { kind: 'simple', text: '18.9 г', values: [ 18.9 ], value: 18.9, unit: 'г' } ],
+  pack_count: 10
+}],
+  ['classifies noun-first rehydration salt packet as medicine', 'Соль регидрационная 18,9мг №10', {
+  trade_name_text: 'соль регидрационная',
+  product_type: 'medicine',
+  strengths: [ { kind: 'simple', text: '18.9 г', values: [ 18.9 ], value: 18.9, unit: 'г' } ],
+  pack_count: 10
+}],
   ['treats low mg/ml ratio shorthand as grams for known levocarnitine brands', 'L-Виава р-р.внутрь 1мг/10мл№10 Левокарнитин', {
   trade_name_text: 'l-виава',
   dosage_form: 'solution',
   strengths: [ ratio('1 г/10 мл', [1], 1, 'г', { value: 10, unit: 'мл' }) ],
   pack_count: 10
+}],
+  ['normalizes known high mg oral solution ratios to grams and package volume', 'Метакартин р-р.внутр.2000мг/10мл№10 Левокарнитин', {
+  trade_name_text: 'метакартин',
+  dosage_form: 'solution',
+  strengths: [ ratio('2 г/10 мл', [2], 2, 'г', { value: 10, unit: 'мл' }) ],
+  volumes: [ volume('10 мл', 10, 'мл') ],
+  pack_count: 10
+}],
+  ['normalizes known high mg injection ratios to grams', 'Ливерин амп. 600мг/2мл №7', {
+  trade_name_text: 'ливерин',
+  dosage_form: 'injection',
+  strengths: [ ratio('0.6 г/2 мл', [0.6], 0.6, 'г', { value: 2, unit: 'мл' }) ],
+  volumes: [ volume('2 мл', 2, 'мл') ],
+  pack_count: 7
 }],
   ['keeps real low mg capsule strengths as milligrams', 'Максфло-Д капс. 0,5мг/0,4мг №30', {
   trade_name_text: 'максфло-д',
@@ -315,6 +371,18 @@ const implicitStrengthCases = [
 }],
   ['parses compact 2x oral solid strength marker', 'АМОКСИКЛАВ ТАБ 2Х1000 №14', {
   trade_name_text: 'амоксиклав',
+  strengths: [ { kind: 'simple', text: '1000 мг', values: [ 1000 ], value: 1000, unit: 'мг' } ],
+  pack_count: 14
+}],
+  ['parses asterisk oral solid strength marker with glued unit', 'Амоксиклав таб 2*1000мг №14', {
+  trade_name_text: 'амоксиклав',
+  dosage_form: 'tablet',
+  strengths: [ { kind: 'simple', text: '1000 мг', values: [ 1000 ], value: 1000, unit: 'мг' } ],
+  pack_count: 14
+}],
+  ['parses x oral solid strength marker with glued unit', 'АМОКСИКЛАВ ТАБ. 2Х1000МГ №14', {
+  trade_name_text: 'амоксиклав',
+  dosage_form: 'tablet',
   strengths: [ { kind: 'simple', text: '1000 мг', values: [ 1000 ], value: 1000, unit: 'мг' } ],
   pack_count: 14
 }],
@@ -426,9 +494,60 @@ const deviceAndProductTypeCases = [
   dosage_form: null,
   trade_name_tokens: [ 'бонди', 'детс', 'печ', 'с', 'железом', '180р' ]
 }],
+  ['classifies liquid soap listings as non-medicine products', 'Жидкое мыло.Океан с дозатором 300мл№1 Life', {
+  product_type: 'other',
+  dosage_form: null,
+  trade_name_text: 'жидкое мыло океан с'
+}],
+  ['classifies dental paste listings as non-medicine products', 'Зубная паста Dentacare с экстра. трав 125+20 145г', {
+  product_type: 'other',
+  dosage_form: null,
+  trade_name_tokens: [ 'dentacare', 'с', 'экстра', 'трав' ]
+}],
+  ['classifies shampoo listings as non-medicine products', 'Домашний-Доктор Шампунь Тройная сила 1000мл№1 Против выпад.волос', {
+  product_type: 'other',
+  dosage_form: null,
+  trade_name_tokens: [ 'домашний-доктор', 'шампунь', 'тройная', 'сила' ]
+}],
+  ['classifies plasters as device products', 'Лейкопластырь MEDIK PLAST гипоаллер. на тканевой основе 5см*5м №1', {
+  product_type: 'device',
+  dosage_form: null,
+  trade_name_text: 'лейкопластырь medik plast гипоаллер на тканевой основе 5 см х 5 м'
+}],
+  ['classifies baby powder listings as non-medicine products', 'Детская присыпка Alissa 40г №1', {
+  product_type: 'other',
+  dosage_form: null,
+  trade_name_tokens: [ 'присыпка', 'alissa' ]
+}],
+  ['classifies body-care balm listings as non-medicine products', 'Карипаин бальзам д/тела сухой 10мл№10', {
+  product_type: 'other',
+  dosage_form: null,
+  trade_name_text: 'карипаин бальзам сухой'
+}],
+  ['classifies lip balm listings as non-medicine products', 'Бороплюс Химани увлажняющий бальзам для губ-Ароматная мята 10мл', {
+  product_type: 'other',
+  dosage_form: null,
+  trade_name_text: 'боро плюс химани увлажняющий бальзам губ-ароматная мята'
+}],
+  ['classifies hair-growth oil listings as non-medicine products', 'Домашний-Доктор Репейное масло 100мл№1 с красным перцем стимул. рост волос', {
+  product_type: 'other',
+  dosage_form: null,
+  trade_name_text: 'домашний-доктор репейное масло с красным перцем стимул рост волос'
+}],
+  ['classifies probiotic context listings as non-medicine products', 'Бектолар саше №6 орал.пробиотик', {
+  product_type: 'other',
+  dosage_form: null,
+  trade_name_text: 'бектолар'
+}],
+  ['classifies vitamin-mineral child syrup listings as non-medicine products', 'Кидекса вит.мин. для дете сироп 150мл №1', {
+  product_type: 'other',
+  dosage_form: null,
+  trade_name_text: 'кидекса вит мин дете'
+}],
   ['parses glued piece counts as pack count', 'Ватные Диски "Bella Cotton" 100шт в полиэтилен', {
   pack_count: 100,
-  trade_name_tokens: [ 'ватные', 'диски', 'bella', 'cotton', 'в', 'полиэтилен' ]
+  product_type: 'device',
+  trade_name_tokens: [ 'ватные', 'диски', 'bella', 'cotton', 'n', '100', 'в', 'полиэтилен' ]
 }],
 ];
 
@@ -439,7 +558,20 @@ const measurementAndRouteCases = [
   strengths: [ { kind: 'simple', text: '158 мг/140 мг', values: [ 158, 140 ], value: null, unit: 'мг' } ],
   pack_count: 60
 }],
+  ['splits compact unit after tight slash in shared-unit strengths', 'Панангин таб.158/140мг N60', {
+  trade_name_text: 'панангин',
+  dosage_form: 'tablet',
+  strengths: [ { kind: 'simple', text: '158 мг/140 мг', values: [ 158, 140 ], value: null, unit: 'мг' } ],
+  pack_count: 60
+}],
   ['keeps pure inhalation solution listings as inhalers', 'Нубетал р-р д/ингаляций 0,1% 2,5мл №10 (Сальбутамол)', {
+  trade_name_text: 'нубетал',
+  dosage_form: 'inhaler',
+  strengths: [ { kind: 'simple', text: '0.1%', values: [ 0.1 ], value: 0.1, unit: '%' } ],
+  volumes: [ { text: '2.5 мл', value: 2.5, unit: 'мл' } ],
+  pack_count: 10
+}],
+  ['keeps for-inhalation solution listings as inhalers', 'Нубетал р-р для ингаляций 0,1% 2,5мл №10', {
   trade_name_text: 'нубетал',
   dosage_form: 'inhaler',
   strengths: [ { kind: 'simple', text: '0.1%', values: [ 0.1 ], value: 0.1, unit: '%' } ],
@@ -496,6 +628,52 @@ const measurementAndRouteCases = [
   ],
   pack_count: 1
 }],
+  ['keeps ophthalmic suspension drops as drops', 'ВизуСол глаз.капли сусп.0,5% 5мг 5мл №1', {
+  trade_name_text: 'визусол',
+  dosage_form: 'drops',
+  strengths: [
+    { kind: 'simple', text: '0.5%', values: [0.5], value: 0.5, unit: '%' },
+    ratio('5 мг/мл', [5], 5, 'мг', { value: null, unit: 'мл' })
+  ],
+  volumes: [volume('5 мл', 5, 'мл')],
+  pack_count: 1
+}],
+  ['infers per-ml strength for drops with package volume', 'Левосетил капли 5мг 20мл', {
+  trade_name_text: 'левосетил',
+  dosage_form: 'drops',
+  strengths: [ratio('5 мг/мл', [5], 5, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('20 мл', 20, 'мл')]
+}],
+  ['infers per-ml components for same-unit drop strengths with package volume', 'БИВОКСА-Д ГЛ.КАПЛИ 5МГ/1МГ 5МЛ', {
+  trade_name_text: 'бивокса-д',
+  dosage_form: 'drops',
+  strengths: [
+    ratio('5 мг/мл', [5], 5, 'мг', { value: null, unit: 'мл' }),
+    ratio('1 мг/мл', [1], 1, 'мг', { value: null, unit: 'мл' })
+  ],
+  volumes: [volume('5 мл', 5, 'мл')]
+}],
+  ['infers missing per-ml component before repeated package volume', 'ЗЕТоптик капли глазные 10мг/мл+5мл сусп по 5мл', {
+  trade_name_text: 'зетоптик',
+  dosage_form: 'drops',
+  strengths: [
+    ratio('10 мг/мл', [10], 10, 'мг', { value: null, unit: 'мл' }),
+    ratio('5 мг/мл', [5], 5, 'мг', { value: null, unit: 'мл' })
+  ],
+  volumes: [volume('5 мл', 5, 'мл')]
+}],
+  ['parses typo kали глаз as eye drops', 'Категор Офта, 5 мг/мл 5 мл, кали глаз.', {
+  trade_name_text: 'категор офта',
+  dosage_form: 'drops',
+  strengths: [ratio('5 мг/мл', [5], 5, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('5 мл', 5, 'мл')]
+}],
+  ['parses dotted typo kали глаз as eye drops', 'Категор Офта 5мг/мл 5мл кали. глаз', {
+  trade_name_text: 'категор офта',
+  dosage_form: 'drops',
+  strengths: [ratio('5 мг/мл', [5], 5, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('5 мл', 5, 'мл')]
+}],
   ['parses plain drop кап abbreviation from surrounding context', 'Аквадетрим кап. 10мл', {
   trade_name_text: 'аквадетрим',
   dosage_form: 'drops',
@@ -539,9 +717,9 @@ const measurementAndRouteCases = [
   }
 }],
   ['parses compact patch dimensions with right-side unit', 'Лейкопластырь тканевой Fum Plast 5*500см', {
-  trade_name_text: 'тканевой fum plast',
-  dosage_form: 'patch',
-  volumes: [volume('5 см х 500 см', 5, 'см', { dimension2: { value: 500, unit: 'см' } })]
+  trade_name_text: 'лейкопластырь тканевой fum plast 5 см х 500 см',
+  dosage_form: null,
+  product_type: 'device'
 }],
   ['treats gram-packaged combination drops as per-gram strength', 'Фелисанс уш.капли 40мг+10мг 16г №1', {
   trade_name_text: 'фелисанс',
@@ -563,6 +741,35 @@ const measurementAndRouteCases = [
   pack_count: 10,
   strengths: [ { kind: 'simple', text: '7%', values: [ 7 ], value: 7, unit: '%' } ],
   volumes: [ { text: '5 мл', value: 5, unit: 'мл' } ]
+}],
+  ['parses Pulmicort ampoules as inhalation suspension, not injection', 'Пульмикорт, 0,25 мг/мл, 2 мл, амп. №20', {
+  trade_name_text: 'пульмикорт',
+  dosage_form: 'suspension',
+  dosage_form_token: 'сусп',
+  dosage_form_source: 'inferred_from_container',
+  container_type: 'ampoule',
+  strengths: [ratio('0.25 мг/мл', [0.25], 0.25, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('2 мл', 2, 'мл')],
+  pack_count: 20
+}],
+  ['parses compact Pulmicort ampoules as inhalation suspension', 'Пульмикорт амп. 0,5мг/мл 2мл №20', {
+  trade_name_text: 'пульмикорт',
+  dosage_form: 'suspension',
+  dosage_form_token: 'сусп',
+  dosage_form_source: 'inferred_from_container',
+  container_type: 'ampoule',
+  strengths: [ratio('0.5 мг/мл', [0.5], 0.5, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('2 мл', 2, 'мл')],
+  pack_count: 20
+}],
+  ['treats ингал/амп as ampoule container plus route hint', 'Брокс ингал/амп.15мг/2мл№10 (Амброксол г/х)', {
+  trade_name_text: 'брокс',
+  dosage_form: 'injection',
+  dosage_form_token: 'амп',
+  dosage_form_source: 'inferred_from_container',
+  container_type: 'ampoule',
+  strengths: [ratio('15 мг/2 мл', [15], 15, 'мг', { value: 2, unit: 'мл' })],
+  pack_count: 10
 }],
   ['parses hyphen-glued ratio strength followed by package volume', 'Ибупрофен сусп. без сахара 100мг/5мл-100мл№1', {
   trade_name_text: 'ибупрофен',
@@ -621,6 +828,13 @@ const measurementAndRouteCases = [
   volumes: [ { text: '100 мл', value: 100, unit: 'мл' } ],
   pack_count: 1
 }],
+  ['keeps decimal package volume in injectable activity-unit strength', 'Эспоген р-р д/инъек.2000МЕ 0.5мл №6', {
+  trade_name_text: 'эспоген',
+  dosage_form: 'injection',
+  strengths: [ratio('2000 ме/0.5 мл', [2000], 2000, 'ме', { value: 0.5, unit: 'мл' })],
+  volumes: [volume('0.5 мл', 0.5, 'мл')],
+  pack_count: 6
+}],
   ['infers omitted per-ml unit for infusion concentrates', 'альвиум конц.д/приг.р-ра д/инф.1мг 5мл №10', {
   trade_name_text: 'альвиум',
   dosage_form: 'solution',
@@ -638,6 +852,57 @@ const measurementAndRouteCases = [
   volumes: [ { text: '5 мл', value: 5, unit: 'мл' } ],
   pack_count: 10
 }],
+  ['infers known infusion concentration before package volume', 'Самфлок р-р.д/инф.5мг 100мл №1', {
+  trade_name_text: 'самфлок',
+  dosage_form: 'solution',
+  dosage_form_route: 'infusion',
+  strengths: [ratio('5 мг/мл', [5], 5, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('100 мл', 100, 'мл')],
+  pack_count: 1
+}],
+  ['infers Tivortin infusion concentration before package volume', 'Тивортин р-р.д/инф.42мг 100мл №1', {
+  trade_name_text: 'тивортин',
+  dosage_form: 'solution',
+  dosage_form_route: 'infusion',
+  strengths: [ratio('42 мг/мл', [42], 42, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('100 мл', 100, 'мл')],
+  pack_count: 1
+}],
+  ['infers Tivamin slash package volume as concentration', 'Тивамин р-р д/инф. 42мг/100мл№1', {
+  trade_name_text: 'тивамин',
+  dosage_form: 'solution',
+  dosage_form_route: 'infusion',
+  strengths: [ratio('42 мг/мл', [42], 42, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('100 мл', 100, 'мл')],
+  pack_count: 1
+}],
+  ['infers known no-form concentration before package volume', 'Саргин Аспартат 200МГ 100МЛ', {
+  trade_name_text: 'саргин аспартат',
+  strengths: [ratio('200 мг/мл', [200], 200, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('100 мл', 100, 'мл')]
+}],
+  ['infers known injectable concentration before package volume', 'Тарес р-р.д/инъек.250мг 4мл №3', {
+  trade_name_text: 'тарес',
+  dosage_form: 'injection',
+  strengths: [ratio('250 мг/мл', [250], 250, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('4 мл', 4, 'мл')],
+  pack_count: 3
+}],
+  ['infers known diclofenac injection concentration before package volume', 'Диклион р-р.д/инъек.25мг 3мл №5', {
+  trade_name_text: 'диклион',
+  dosage_form: 'injection',
+  strengths: [ratio('25 мг/мл', [25], 25, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('3 мл', 3, 'мл')],
+  pack_count: 5
+}],
+  ['infers known infusion concentration for Tiopol before package volume', 'Тиопол р-р.д/инф.12мг 50мл №1', {
+  trade_name_text: 'тиопол',
+  dosage_form: 'solution',
+  dosage_form_route: 'infusion',
+  strengths: [ratio('12 мг/мл', [12], 12, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('50 мл', 50, 'мл')],
+  pack_count: 1
+}],
   ['keeps repeated concentrate volume as ratio denominator', 'Иритеро конц.д/приг.р-ра д/инф.100мг 5мл/5мл №1', {
   trade_name_text: 'иритеро',
   dosage_form: 'solution',
@@ -651,6 +916,32 @@ const measurementAndRouteCases = [
     filterPrefix: 'volumeFilter',
     filterValuesInclude: ['5 мл']
   }
+}],
+  ['treats Betadine solution mg/g denominator typo as per ml', 'Бетадин р-р 100мг/г 30мл', {
+  trade_name_text: 'бетадин',
+  dosage_form: 'solution',
+  strengths: [ratio('100 мг/1 мл', [100], 100, 'мг', { value: 1, unit: 'мл' })],
+  volumes: [volume('30 мл', 30, 'мл')]
+}],
+  ['infers known ampoule slash volume as package volume', 'ИНГАМИСТ АМП 100МГ/3МЛ №10', {
+  trade_name_text: 'ингамист',
+  dosage_form: 'injection',
+  strengths: [ratio('100 мг/мл', [100], 100, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('3 мл', 3, 'мл')],
+  pack_count: 10
+}],
+  ['infers known no-form slash volume as package volume', 'АМБРОКСОЛ 7,5МГ/2МЛ №20', {
+  trade_name_text: 'амброксол',
+  strengths: [ratio('7.5 мг/мл', [7.5], 7.5, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('2 мл', 2, 'мл')],
+  pack_count: 20
+}],
+  ['infers known slash injectable volume as package volume', 'Тарес р-р.д/инъек.250мг/4мл №3', {
+  trade_name_text: 'тарес',
+  dosage_form: 'injection',
+  strengths: [ratio('250 мг/мл', [250], 250, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('4 мл', 4, 'мл')],
+  pack_count: 3
 }],
   ['parses compact solution-form strength followed by package volume', 'Элькар р-р300мг/мл100мл№1', {
   trade_name_text: 'элькар',
@@ -805,6 +1096,16 @@ const measurementAndRouteCases = [
   ],
   pack_count: 1
 }],
+  ['infers metered aerosol dose strength before package mass and dose count', 'Сальбутамол-АВ аэроз.100мкг/7г.200доз.№1', {
+  trade_name_text: 'сальбутамол-ав',
+  dosage_form: 'aerosol',
+  strengths: [ratio('100 мкг/доз', [100], 100, 'мкг', { value: null, unit: 'доз' })],
+  volumes: [
+    volume('200 доз', 200, 'доз'),
+    volume('7 г', 7, 'г', { packageVolume: true })
+  ],
+  pack_count: 1
+}],
   ['matches stored simple strength for per-dose aerosol strengths', 'Беклометазон 250мкг/доз 200доз аэрозоль', {
   trade_name_text: 'беклометазон',
   dosage_form: 'aerosol',
@@ -843,6 +1144,18 @@ const measurementAndRouteCases = [
   strengths: [ { kind: 'simple', text: '2.5%', values: [ 2.5 ], value: 2.5, unit: '%' } ],
   volumes: [ { text: '45 г', value: 45, unit: 'г' } ]
 }],
+  ['infers topical dose-unit strengths as per gram before package mass', 'ВИФЕРОН МАЗЬ 40 000МЕ 12ГР.', {
+  trade_name_text: 'виферон',
+  dosage_form: 'ointment',
+  strengths: [ratio('40000 ме/г', [40000], 40000, 'ме', { value: null, unit: 'г' })],
+  volumes: [volume('12 г', 12, 'г')]
+}],
+  ['infers topical dose-unit ED strengths as per gram before package mass', 'Ацикловир крем 100000ЕД 5г', {
+  trade_name_text: 'ацикловир',
+  dosage_form: 'cream',
+  strengths: [ratio('100000 ед/г', [100000], 100000, 'ед', { value: null, unit: 'г' })],
+  volumes: [volume('5 г', 5, 'г')]
+}],
   ['treats topical slash mass as package size', 'Дермазол крем 20мг/15г№1', {
   trade_name_text: 'дермазол',
   dosage_form: 'cream',
@@ -855,6 +1168,13 @@ const measurementAndRouteCases = [
     filterPrefix: 'volumeFilter',
     filterValuesInclude: ['15 г']
   }
+}],
+  ['treats aerosol slash mass as package size', 'Пантенол аэрозоль 50мг/116г.№1 МикроФарм', {
+  trade_name_text: 'пантенол',
+  dosage_form: 'aerosol',
+  pack_count: 1,
+  strengths: [ratio('50 мг/г', [50], 50, 'мг', { value: null, unit: 'г' })],
+  volumes: [volume('116 г', 116, 'г', { packageVolume: true })]
 }],
   ['treats trailing mass after topical ratio strengths as package size', 'Изигел плюс 50мг/г+30мг/г 40г №1', {
   trade_name_text: 'изигел плюс',
@@ -924,9 +1244,9 @@ const measurementAndRouteCases = [
   }
 }],
   ['parses compact patch dimensions written with an asterisk', 'Перцовый пластырь 6см*10см №220 (без перфорации)', {
-  trade_name_text: 'перцовый',
-  dosage_form: 'patch',
-  volumes: [ { text: '6 см х 10 см', value: 6, unit: 'см', dimension2: { value: 10, unit: 'см' } } ],
+  trade_name_text: 'перцовый пластырь 6 см х 10 см без перфорации',
+  dosage_form: null,
+  product_type: 'device',
   pack_count: 220
 }],
   ['detects suppository rectal route', 'НАТАЦИН СУПП. РЕКТ. 100МГ №3', { dosage_form: 'suppository', dosage_form_route: 'rectal' }],
@@ -994,6 +1314,16 @@ const measurementAndRouteCases = [
   volumes: [ { text: '5 мл', value: 5, unit: 'мл' } ],
   pack_count: 5
 }],
+  ['splits compact plus strengths with shared per-ml denominator', 'Толкимадо амп.100+2,5мг/мл№5', {
+  trade_name_text: 'толкимадо',
+  dosage_form: 'injection',
+  container_type: 'ampoule',
+  strengths: [
+    ratio('100 мг/мл', [100], 100, 'мг', { value: null, unit: 'мл' }),
+    ratio('2.5 мг/мл', [2.5], 2.5, 'мг', { value: null, unit: 'мл' })
+  ],
+  pack_count: 5
+}],
   ['parses Adrenaline ampoule decimal percent strength', 'адреналин амп. 0,18% 1мл №10', {
   trade_name_text: 'адреналин',
   dosage_form: 'injection',
@@ -1046,6 +1376,14 @@ const measurementAndRouteCases = [
   strengths: [ ratio('1000 мг/4 мл', [1000], 1000, 'мг', { value: 4, unit: 'мл' }) ],
   pack_count: 5
 }],
+  ['treats citicoline per-ml ampoule typo as package-dose ratio', 'Цитиколин-LP амп.1000мг/мл.4мл№5', {
+  trade_name_text: 'цитиколин-lр',
+  dosage_form: 'injection',
+  container_type: 'ampoule',
+  strengths: [ ratio('1000 мг/4 мл', [1000], 1000, 'мг', { value: 4, unit: 'мл' }) ],
+  volumes: [ { text: '4 мл', value: 4, unit: 'мл' } ],
+  pack_count: 5
+}],
   ['infers omitted injectable mass unit before slash volume', 'РОНОЦИТ АМП. 1000/4МЛ №5', {
   trade_name_text: 'роноцит',
   dosage_form: 'injection',
@@ -1061,6 +1399,20 @@ const measurementAndRouteCases = [
   strengths: [ ratio('1000 мг/4 мл', [1000], 1000, 'мг', { value: 4, unit: 'мл' }) ],
   volumes: [ { text: '4 мл', value: 4, unit: 'мл' } ],
   pack_count: 3
+}],
+  ['infers ampoule total-dose ratio for known Ambromer listings without route text', 'Амбромер амп.15мг 2мл №5', {
+  trade_name_text: 'амбромер',
+  dosage_form: 'injection',
+  strengths: [ ratio('15 мг/2 мл', [15], 15, 'мг', { value: 2, unit: 'мл' }) ],
+  volumes: [ { text: '2 мл', value: 2, unit: 'мл' } ],
+  pack_count: 5
+}],
+  ['infers ampoule total-dose ratio for known Esfolip listings without route text', 'Эсфолип амп.250мг.5мл№5 Эссенциальные Фосфолипиды', {
+  trade_name_text: 'эсфолип',
+  dosage_form: 'injection',
+  strengths: [ ratio('250 мг/5 мл', [250], 250, 'мг', { value: 5, unit: 'мл' }) ],
+  volumes: [ { text: '5 мл', value: 5, unit: 'мл' } ],
+  pack_count: 5
 }],
   ['drops parenthesized active ingredient annotation with oral liquid dose', 'азилаб сусп.15мл №1 (азитромицин 100мг 5мл)', {
   trade_name_text: 'азилаб',
@@ -1111,6 +1463,20 @@ const measurementAndRouteCases = [
     sqlIncludes: [ 'lower((m.name)::text) LIKE :tradeNamePrefix' ]
   }
 }],
+  ['keeps standalone M brand suffix before strength', 'Диампа М, 12,5/1000 мг, таб. №28', {
+  trade_name_text: 'диампа м',
+  trade_name_tokens: [ 'диампа', 'м' ],
+  dosage_form: 'tablet',
+  strengths: [ { kind: 'simple', text: '12.5 мг/1000 мг', values: [ 12.5, 1000 ], value: null, unit: 'мг' } ],
+  pack_count: 28
+}],
+  ['splits hyphenated M brand suffix before strength', 'ДИАМПА-М ТАБ. 12,5/1000МГ №28', {
+  trade_name_text: 'диампа м',
+  trade_name_tokens: [ 'диампа', 'м' ],
+  dosage_form: 'tablet',
+  strengths: [ { kind: 'simple', text: '12.5 мг/1000 мг', values: [ 12.5, 1000 ], value: null, unit: 'мг' } ],
+  pack_count: 28
+}],
   ['detects explicit oral route for suspension listings', 'Алмидоз суспензия для приема внутрь 10 мл №10', {
   dosage_form: 'suspension',
   dosage_form_route: 'oral',
@@ -1127,7 +1493,7 @@ const measurementAndRouteCases = [
   ['drops compact intravascular intracavitary route from trade name', 'Фторурацил р-р.д/внутр-сосуд.внутр-полост.введ.50мг 20мл №1', {
   trade_name_text: 'фторурацил',
   dosage_form: 'solution',
-  strengths: [simple('50 мг', [50], 50, 'мг')],
+  strengths: [ratio('50 мг/мл', [50], 50, 'мг', { value: null, unit: 'мл' })],
   volumes: [ { text: '20 мл', value: 20, unit: 'мл' } ],
   pack_count: 1
 }],
@@ -1143,10 +1509,19 @@ const annotationAndVariantCases = [
   trade_name_text: 'миндальное масло горького',
   trade_name_tokens: [ 'миндальное', 'масло', 'горького' ]
 }],
+  ['drops prefilled syringe marker from parenthesized annotation', 'Эспоген р-р 2000МЕ 0,5мл №6 (запол. шприц.)', {
+  trade_name_text: 'эспоген',
+  trade_name_tokens: [ 'эспоген' ],
+  dosage_form: 'injection',
+  strengths: [ratio('2000 ме/0.5 мл', [2000], 2000, 'ме', { value: 0.5, unit: 'мл' })],
+  volumes: [volume('0.5 мл', 0.5, 'мл')],
+  pack_count: 6
+}],
   ['keeps brand tokens repeated in parenthesized annotations', 'Солипод мозольный пластырь №5 (солипод)', {
-  trade_name_text: 'солипод мозольный',
-  trade_name_tokens: [ 'солипод', 'мозольный' ],
-  dosage_form: 'patch',
+  trade_name_text: 'солипод мозольный пластырь солипод',
+  trade_name_tokens: [ 'солипод', 'мозольный', 'пластырь', 'солипод' ],
+  dosage_form: null,
+  product_type: 'device',
   pack_count: 5
 }],
   ['keeps parenthesized flavor tokens that identify SKUs', 'ФИТОСЕПТ ПАСТ. №16 (ЛИМОН)', {
@@ -1212,6 +1587,22 @@ const annotationAndVariantCases = [
   pack_count: 10
 }],
   ['keeps parenthesized classic flavor variants', 'АДЖИСЕПТ ПАСТ №24 (КЛАССИЧЕСКИЙ)', { trade_name_tokens: [ 'аджисепт', 'классический' ], pack_count: 24 }],
+  ['drops inline spray flavor annotation before strength', 'Стрепсилс Интенсив спрей дозир. со вкусом вишни и мяты 8,75мг/доза 15мл №1', {
+  trade_name_text: 'стрепсилс интенсив',
+  trade_name_tokens: [ 'стрепсилс', 'интенсив' ],
+  dosage_form: 'spray',
+  strengths: [ratio('8.75 мг/доз', [8.75], 8.75, 'мг', { value: null, unit: 'доз' })],
+  volumes: [volume('15 мл', 15, 'мл')],
+  pack_count: 1
+}],
+  ['drops abbreviated inline spray flavor annotation before strength', 'Стрепсилс Интенсив спрей дозир. со вкус. вишни 8,75мг/доза 15мл №1', {
+  trade_name_text: 'стрепсилс интенсив',
+  trade_name_tokens: [ 'стрепсилс', 'интенсив' ],
+  dosage_form: 'spray',
+  strengths: [ratio('8.75 мг/доз', [8.75], 8.75, 'мг', { value: null, unit: 'доз' })],
+  volumes: [volume('15 мл', 15, 'мл')],
+  pack_count: 1
+}],
   ['keeps parenthesized short variant tokens', 'АКВА МАРИС СПРЕЙ 50МЛ (НОРМ)', {
   trade_name_tokens: [ 'аква', 'марис', 'норм' ],
   volumes: [ { text: '50 мл', value: 50, unit: 'мл' } ]
@@ -1266,8 +1657,9 @@ test('normalizes common genitive and spelling-variant trade tokens', () => {
       attributes: {
         trade_name_text: 'боро плюс софт',
         trade_name_tokens: ['боро', 'плюс', 'софт'],
-        dosage_form: 'cream',
-        volumes: [volume('100 мл', 100, 'мл')],
+        product_type: 'other',
+        dosage_form: null,
+        volumes: [],
       },
     },
   });
@@ -1289,9 +1681,8 @@ test('normalizes cotton sterility and wet wipes descriptor order', () => {
     expected: {
       attributes: {
         trade_name_text: 'вата гигр нестер',
-        trade_name_tokens: ['вата', 'гигр', 'нестер'],
-        product_type: null,
-        strengths: [simple('50 г', [50], 50, 'г')],
+        product_type: 'other',
+        dosage_form: null,
       },
     },
   });
@@ -1301,7 +1692,9 @@ test('normalizes cotton sterility and wet wipes descriptor order', () => {
     expected: {
       attributes: {
         trade_name_text: 'вата гигр стер',
-        trade_name_tokens: ['вата', 'гигр', 'стер'],
+        trade_name_tokens: ['вата', 'мед', 'гигр', 'стер', '50', 'г'],
+        product_type: 'device',
+        dosage_form: null,
         strengths: [simple('50 г', [50], 50, 'г')],
       },
     },
@@ -1343,6 +1736,55 @@ test('normalizes gummy magnesium B6 and compact percent-volume after dot', () =>
         strengths: [simple('10%', [10], 10, '%')],
         volumes: [volume('5 мл', 5, 'мл')],
         pack_count: 10,
+      },
+    },
+  });
+
+  assertParsedCase({
+    query: 'Ампициллина тригидрат таб 0, 25г №10',
+    expected: {
+      attributes: {
+        trade_name_text: 'ампициллина тригидрат',
+        dosage_form: 'tablet',
+        strengths: [simple('0.25 г', [0.25], 0.25, 'г')],
+        pack_count: 10,
+      },
+    },
+  });
+
+  assertParsedCase({
+    query: 'Полипарин р-р для в/в и п/к введ.25000МЕ 5мл№1 фл.',
+    expected: {
+      attributes: {
+        trade_name_text: 'полипарин',
+        dosage_form: 'injection',
+        strengths: [ratio('25000 ме/5 мл', [25000], 25000, 'ме', { value: 5, unit: 'мл' })],
+        volumes: [volume('5 мл', 5, 'мл')],
+        pack_count: 1,
+      },
+    },
+  });
+
+  assertParsedCase({
+    query: 'Имферон-С Р-Р 20МГ/5 МЛ №1',
+    expected: {
+      attributes: {
+        trade_name_text: 'имферон-с',
+        dosage_form: 'solution',
+        strengths: [ratio('20 мг/5 мл', [20], 20, 'мг', { value: 5, unit: 'мл' })],
+        pack_count: 1,
+      },
+    },
+  });
+
+  assertParsedCase({
+    query: 'ОМК-2 стер. офтальмолог. р-р 10мл',
+    expected: {
+      attributes: {
+        trade_name_text: 'омк-2',
+        trade_name_tokens: ['омк-2'],
+        dosage_form: 'drops',
+        volumes: [volume('10 мл', 10, 'мл')],
       },
     },
   });

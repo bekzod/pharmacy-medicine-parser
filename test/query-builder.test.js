@@ -103,7 +103,7 @@ test('strict fallback adds mg/g equivalents for percent mass products', () => {
 });
 
 test('strict fallback adds per-ml aliases for mass-denominator ratios', () => {
-  const parsed = parseMedicineQuery('Бетадин р-р 100мг/г 120мл');
+  const parsed = parseMedicineQuery('Тестовый р-р 100мг/г 120мл');
   const searchQuery = buildMedicineSearchQuery(parsed, {
     limit: 5,
     requireParsedAttributeMatch: true,

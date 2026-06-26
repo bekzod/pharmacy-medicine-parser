@@ -81,12 +81,23 @@ function hasNumericMeasurementContext(tokens, index) {
   return tokens[index - 1]?.type === 'NUMBER' || tokens[index + 1]?.type === 'NUMBER';
 }
 
+function hasFollowingStrengthContext(tokens, index) {
+  if (tokens[index - 1]?.type !== 'WORD' || tokens[index + 1]?.type !== 'NUMBER') return false;
+
+  let cursor = index + 2;
+  while (tokens[cursor]?.type === 'SLASH' && tokens[cursor + 1]?.type === 'NUMBER') {
+    cursor += 2;
+  }
+
+  return tokens[cursor]?.type === 'UNIT' && ['мг', 'мкг', 'г'].includes(tokens[cursor].normalizedValue);
+}
+
 function restoreStandaloneLengthUnitTokens(tokens) {
   return tokens.map((token, index) => {
     if (
       token?.type !== 'UNIT' ||
       token.normalizedValue !== 'м' ||
-      hasNumericMeasurementContext(tokens, index)
+      (hasNumericMeasurementContext(tokens, index) && !hasFollowingStrengthContext(tokens, index))
     ) {
       return token;
     }

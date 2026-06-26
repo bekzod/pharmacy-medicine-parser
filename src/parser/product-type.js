@@ -23,6 +23,10 @@ function classifyProductType(rawQuery, normalizedText, { dosageForm, strengths, 
     hasInjectableRouteSignal ||
     (hasSyringeSignal && hasPrefilledSignal);
 
+  for (const pattern of PRODUCT_TYPE_PATTERNS.medicine) {
+    if (pattern.test(text)) return 'medicine';
+  }
+
   for (const pattern of PRODUCT_TYPE_PATTERNS.other) {
     if (pattern.test(text)) return 'other';
   }
@@ -56,6 +60,7 @@ function isBrandOnlyProductType(productType) {
 // so keep suspension and drop powder regardless of encounter order.
 const EXPLICIT_DOSAGE_FORM_KEEP_PAIRS = new Set([
   'spray|suspension',
+  'drops|suspension',
   'enema|solution',
   'aerosol|inhaler',
   'suspension|powder',
