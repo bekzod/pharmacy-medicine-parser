@@ -147,6 +147,8 @@ const MEDICINE_FORM_PHRASE_NORMALIZERS = [
   [/(?<![а-яёa-z0-9])г\s*[\/.]\s*х(?![а-яёa-z0-9])/gu, ' '],
   [/со\s+вкусом\s+/gu, ' '],
   [/со\s+вкус\.?\s+/gu, ' '],
+  [/(?<![\p{L}\d])натр\.?\s+хлор\.?(?![\p{L}\d])/gu, 'натрия хлорид'],
+  [/(?<![\p{L}\d])кунжут\s+еги(?![\p{L}\d])/gu, 'кунжутное масло'],
   [/с\s+сахар\.?/gu, ' '],
   [/к\s*-\s*та/gu, ' '],
   [/для\s+детей/gu, ' '],
@@ -216,13 +218,8 @@ const MEDICINE_FORM_PHRASE_NORMALIZERS = [
   [/р\s*-\s*р\.?\s*д\s*\/\s*внутр(?:ь|\.?)/gu, ' раствор '],
   [/р\s*-\s*р\.?\s*д\s*\/\s*пр\.?\s*внутр(?:ь|\.?)/gu, ' раствор '],
   [/р\s*-\s*р\.?\s*орал\.?/gu, ' раствор '],
-  // "р-р д/ингаляций" / "р-р для ингаляций" describe a liquid solution used
-  // via nebulizer (e.g. Нубетал, Saliven, Беротек nebules). Catalog rows
-  // store the form as `solution`, so preserve "раствор" — mirrors the
-  // infusion patterns above. Bare "д/ингаляций" still maps to " инг "
-  // for genuine inhaler abbreviations that lack an explicit "р-р" prefix.
-  [/р\s*-\s*р\.?\s*д\s*\/\s*ингаляци[а-я]*/gu, ' раствор '],
-  [/р\s*-\s*р\.?\s*для\s*ингаляци[а-я]*/gu, ' раствор '],
+  [/р\s*-\s*р\.?\s*д\s*\/\s*ингаляци[а-я]*/gu, ' инг '],
+  [/р\s*-\s*р\.?\s*для\s*ингаляци[а-я]*/gu, ' инг '],
   [/д\s*\/\s*ингаляци[а-я]*/gu, ' инг '],
   [/раствор\s+для\s+полоскан[а-я]*/gu, ' '],
   [/раствор\s+для\s+наружн[а-я]*\s+применен[а-я]*/gu, ' '],

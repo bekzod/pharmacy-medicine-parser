@@ -4,6 +4,8 @@ const {
 } = require('./constants');
 const { tokenizeMedicineQuery } = require('./tokenizer');
 
+const PREFILLED_ANNOTATION_WORDS = new Set(['запол']);
+
 function isPlainAnnotationToken(token) {
   return (
     (token?.type === 'WORD' && token.normalizedValue) ||
@@ -17,10 +19,18 @@ function addAnnotationNoiseTokens(noise, annotationText) {
   const annotationTokens = tokenizeMedicineQuery(annotationText);
   if (!annotationTokens.length) return;
 
+  for (const token of annotationTokens) {
+    const value = token?.normalizedValue || token?.value;
+    if (PREFILLED_ANNOTATION_WORDS.has(value)) noise.add(value);
+  }
+
   if (annotationTokens.every(isPlainAnnotationToken)) {
     for (const token of annotationTokens) {
       const value = token.normalizedValue || token.value;
-      if (!PARENTHESIZED_VARIANT_TOKENS.has(value)) noise.add(value);
+      if (!PARENTHESIZED_VARIANT_TOKENS.has(value)) {
+        noise.add(value);
+        if (token.value && token.value !== value) noise.add(token.value);
+      }
     }
     return;
   }
@@ -34,6 +44,18 @@ function addAnnotationNoiseTokens(noise, annotationText) {
     if (token?.type !== 'WORD' || !token.normalizedValue) continue;
     if (!PARENTHESIZED_VARIANT_TOKENS.has(token.normalizedValue)) {
       noise.add(token.normalizedValue);
+    }
+  }
+}
+
+function addInlineSprayFlavorNoiseTokens(noise, rawText) {
+  for (const match of String(rawText || '').matchAll(
+    /спре[йя][\s\S]*?со\s+вкус(?:ом|\.?)\s+([\p{L}\s-]+?)(?=\d|\s+\d|$)/giu,
+  )) {
+    for (const token of tokenizeMedicineQuery(match[1])) {
+      if (token?.type !== 'WORD') continue;
+      if (token.normalizedValue) noise.add(token.normalizedValue);
+      if (token.value) noise.add(token.value);
     }
   }
 }
@@ -62,6 +84,8 @@ function collectAnnotationNoiseTokens(rawQuery) {
     }
     addAnnotationNoiseTokens(noise, suffix);
   }
+
+  addInlineSprayFlavorNoiseTokens(noise, text.replace(/\([^)]*\)/gu, ' '));
 
   return noise;
 }

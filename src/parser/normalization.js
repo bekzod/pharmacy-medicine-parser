@@ -200,7 +200,8 @@ function normalizeMedicineQuery(rawQuery) {
       /-\s*(\d+(?:\.\d+)?)(?=(?:\s+(?!\1\s+(?:мг|мкг|г|%)(?:\b|\/))[\p{L}\d.-]+){0,6}\s+\1\s+(?=(?:мг|мкг|г|%)(?:\b|\/)))/giu,
       ' ',
     )
-    .replace(/(\d),(\d)/gu, '$1.$2')
+    .replace(/(\d)\s*,\s*(\d)/gu, '$1.$2')
+    .replace(/(\d+(?:\.\d+)?)\s*млн\.?\s*(ме|ед|iu)(?!\p{L})/giu, (_, value, unit) => `${Number(value) * 1000000} ${unit}`)
     .replace(/(?<=\d)['’](?=\d{3}(?!\d))/gu, '')
     .replace(/(\d+(?:\.\d+)?(?:мкг|мг|мл|кг|г|л|ме|ед))_(?=\d)/giu, '$1/')
     .replace(
@@ -209,7 +210,10 @@ function normalizeMedicineQuery(rawQuery) {
     )
     .replace(/(\d+(?:\.\d+)?)(мкг|мг|мл|кг|г|л|ме|ед|%)\s*\/\s*№(?=\s*\d)/giu, '$1 $2 №')
     .replace(/(\d+(?:\.\d+)?)(мкг|мг)\s*\/\s*(?:д|доз)(?![\p{L}\d])/giu, '$1 $2/доз')
-    .replace(/(\d+(?:\.\d+)?)(мкг|мг)\s*\/\s*(\d+)(?![.\p{L}\d])/giu, '$1 $2/$3 доз')
+    .replace(
+      /(\d+(?:\.\d+)?)(мкг|мг)\s*\/\s*(\d+)(?![.\p{L}\d])(?!\s*(?:мкг|мг|мл|кг|г|л|ме|ед|%)(?!\p{L}))/giu,
+      '$1 $2/$3 доз',
+    )
     .replace(/капли\s+в\s+нос/giu, 'капли')
     .replace(/д\s*\/\s*внутр[-\s]*сосуд[а-я]*[.\s-]*внутр[-\s]*полост[а-я]*[.\s-]*введ\.?/giu, ' ')
     .replace(/д\s*\/\s*внут\.?\s*в\s*[-/]\s*м\.?\s*введ\.?/giu, ' ')
@@ -219,7 +223,9 @@ function normalizeMedicineQuery(rawQuery) {
     .replace(/(\d)(мкг|мг|мл|кг|г|л|ме|ед)\s*\/\s+(?=\d)/giu, '$1$2/')
     .replace(/%[./]?(?=\d)/gu, '% ')
     .replace(/(мкг|мг|мл|кг|г|л|%)-(?=\d)/giu, '$1 ')
+    .replace(/(?<![\p{L}\d])\d+\s*[*х×x]\s*(\d+(?:\.\d+)?)(мкг|мг|г|ме|ед)(?![\p{L}\d])/giu, '$1 $2')
     .replace(/(\d)\s*[х×x]\s*(\d)/gu, '$1x$2')
+    .replace(/(\d+)\s*[*х×x]\s*(\d+)(мм|см|м)(?!\p{L})/giu, '$1 $3 х $2 $3')
     .replace(/(?<![\p{L}\d])(\d{1,2})\s*g(?![\p{L}\d])/giu, '$1 g')
     .replace(
       /(\d+(?:\.\d+)?)(мм|см|м)\s*[*хx×]\s*(\d+(?:\.\d+)?)(мм|см|м)?/giu,
@@ -241,6 +247,11 @@ function normalizeMedicineQuery(rawQuery) {
     .replace(/(?<!\d)\.(?!\d)/gu, ' ')
     .replace(/(?<![\p{L}\d])карри\s+ф\s+а(?![\p{L}\d])/giu, 'carry f a')
     .replace(/(?<![\p{L}\d])фотилфорте(?![\p{L}\d])/giu, 'фотил форте')
+    .replace(/(?<![\p{L}\d])кали\.?\s+глаз(?![\p{L}\d])/giu, 'капли глаз')
+    .replace(
+      /(?:стер(?:ильн)?\.?\s+)?офтальмолог(?:ическ(?:ий|ая|ое|ие))?\.?\s*(?:р\s*-\s*р\.?|раствор)/giu,
+      'капли глаз',
+    )
     .replace(/д\s*\/\s*при[её]м\s+внут(?:рь?)?/giu, ' ')
     .replace(/(?<=\p{L})\.(?=\d)/gu, ' ')
     // Split Cyrillic-letter\u2192digit boundaries (e.g. "\u043a\u0440\u0435\u043c15\u0433" \u2192 "\u043a\u0440\u0435\u043c 15\u0433") so
@@ -254,6 +265,7 @@ function normalizeMedicineQuery(rawQuery) {
     // letters before the hyphen and \u22652 digits after to preserve ingredient/
     // vitamin patterns like "\u0414-3", "\u0412-12", "\u03c9-3", "\u043e\u043c\u0435\u0433\u0430-3".
     .replace(/([\p{L}]{4,})-(\d{2,})(?![\p{L}\d])/gu, '$1 $2')
+    .replace(/([\p{L}]{3,})-[мm](?=\s|$)/giu, '$1 м')
     .replace(/([\p{L}]{4,})-кап(?=\s*\.?\s*(?:глаз|уш|наз))/giu, '$1 кап')
     .replace(/(?<![\p{L}\d])[hн](\d+(?:\.\d+)?)(?=\s*(?:мг|мкг|г|%)(?![\p{L}\d]))/giu, '$1')
     // Expand pharmacy "<digits>\u0414" abbreviation to "<digits> \u0434\u043e\u0437" (e.g.
