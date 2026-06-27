@@ -35,7 +35,7 @@ const TRADE_NAME_SCORE_PARTS = {
 };
 
 function buildDecimalVariants(value) {
-  const normalized = normalizeMatchTerm(value);
+  const normalized = normalizeSqlTerm(value);
   if (!normalized) return [];
 
   const variants = new Set([normalized]);
@@ -47,10 +47,6 @@ function buildDecimalVariants(value) {
   }
 
   return [...variants];
-}
-
-function normalizeMatchTerm(value) {
-  return normalizeSqlTerm(value);
 }
 
 function buildCandidateLimit(limit, offset) {
@@ -68,17 +64,7 @@ function appendReplacementsWithVariants(
   values,
   variantBuilder = buildDecimalVariants,
 ) {
-  const keys = [];
-
-  values.forEach((value, valueIndex) => {
-    variantBuilder(value).forEach((variant, variantIndex) => {
-      const key = `${prefix}${valueIndex}_${variantIndex}`;
-      replacements[key] = variant;
-      keys.push(key);
-    });
-  });
-
-  return keys;
+  return appendReplacementsWithVariantsGrouped(replacements, prefix, values, variantBuilder).flat();
 }
 
 function buildExactAnyCondition(expressions, keys) {
@@ -305,10 +291,6 @@ function buildStrengthSearchTextsWithPolicy(strengths, volumes = [], { strict = 
   return [...values];
 }
 
-function buildStrengthSearchTexts(strengths, volumes = []) {
-  return buildStrengthSearchTextsWithPolicy(strengths, volumes);
-}
-
 function doseUnitAliases(unit) {
   const normalized = String(unit || '').toLowerCase();
   if (normalized === 'ед') return ['ме'];
@@ -423,10 +405,6 @@ function addSameDenominatorRatioStrengthTexts(values, strengths) {
   }
 }
 
-function buildStrictStrengthSearchTexts(strengths, volumes = []) {
-  return buildStrengthSearchTextsWithPolicy(strengths, volumes, { strict: true });
-}
-
 function buildVolumeSearchTexts(volumes) {
   const values = new Set();
 
@@ -462,7 +440,7 @@ function buildStrictVolumeSearchTexts(volumes, strengths) {
             unitValuesMatch(volume, denominator) ||
             (volume?.text &&
               denominator?.text &&
-              normalizeMatchTerm(volume.text) === normalizeMatchTerm(denominator.text)),
+              normalizeSqlTerm(volume.text) === normalizeSqlTerm(denominator.text)),
         ),
     ),
   );
@@ -483,7 +461,7 @@ function buildTradeNameTokenSearchTexts(tradeNameTokens) {
 
   for (const token of tradeNameTokens || []) {
     if (values.size >= TRADE_NAME_TOKEN_LIMIT) break;
-    const normalized = normalizeMatchTerm(token);
+    const normalized = normalizeSqlTerm(token);
     if (!normalized) continue;
     if (normalized.length < 2) continue;
     if (
@@ -557,7 +535,7 @@ function deriveSearchText(parsedQuery, options = {}) {
   const candidateLimit = Number.isFinite(options.candidateLimit)
     ? Math.max(Math.trunc(options.candidateLimit), limit + offset, 1)
     : buildCandidateLimit(limit, offset);
-  const tradeNameQuery = normalizeMatchTerm(attributes.trade_name_text);
+  const tradeNameQuery = normalizeSqlTerm(attributes.trade_name_text);
   const tradeNamePrefix = escapeLikePattern(tradeNameQuery);
 
   const replacements = {
@@ -714,8 +692,10 @@ function buildScoreExpression(context) {
   const includeMeasurementSearchTexts = structuredSearch || requireParsedAttributeMatch;
   const strengthSearchTexts = includeMeasurementSearchTexts
     ? strictParsedAttributeFilters
-      ? buildStrictStrengthSearchTexts(attributes.strengths || [], attributes.volumes || [])
-      : buildStrengthSearchTexts(attributes.strengths || [], attributes.volumes || [])
+      ? buildStrengthSearchTextsWithPolicy(attributes.strengths || [], attributes.volumes || [], {
+          strict: true,
+        })
+      : buildStrengthSearchTextsWithPolicy(attributes.strengths || [], attributes.volumes || [])
     : [];
   if (strengthSearchTexts.length && structuredSearch) {
     const strengthScoreExpression = buildAttributeScoreExpression(
@@ -799,7 +779,7 @@ function buildCandidateConditions(context) {
       replacements,
       'vendorCountryFilter',
       [attributes.vendor_country_text],
-      (value) => [normalizeMatchTerm(value)],
+      (value) => [normalizeSqlTerm(value)],
     );
     candidateBaseConditions.push(buildLikeAnyCondition([normalizedVendorCountryExpr], vendorCountryKeys));
   }

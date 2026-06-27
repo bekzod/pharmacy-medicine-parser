@@ -535,13 +535,13 @@ function convertMassStrengthsToPerDoseWhenExplicit(tokens, state) {
   }
 }
 
+function isInjectionOrInfusionContext(state, dosageFormRoute) {
+  return ['injection', 'infusion'].includes(state.dosageForm) ||
+    ['injection', 'infusion'].includes(dosageFormRoute);
+}
+
 function convertInjectableOmittedMassSlashVolume(state, tokens, dosageFormRoute) {
-  const isInjectableContext =
-    state.dosageForm === 'injection' ||
-    state.dosageForm === 'infusion' ||
-    dosageFormRoute === 'injection' ||
-    dosageFormRoute === 'infusion';
-  if (!isInjectableContext || state.strengthCandidates.length > 0) return;
+  if (!isInjectionOrInfusionContext(state, dosageFormRoute) || state.strengthCandidates.length > 0) return;
 
   const malformedVolumeIndex = state.volumeCandidates.findIndex(
     (v) =>
@@ -576,12 +576,7 @@ function convertInjectableOmittedMassSlashVolume(state, tokens, dosageFormRoute)
 }
 
 function convertInjectableOmittedMassSeparateSlashVolumes(state, tokens, dosageFormRoute) {
-  const isInjectableContext =
-    state.dosageForm === 'injection' ||
-    state.dosageForm === 'infusion' ||
-    dosageFormRoute === 'injection' ||
-    dosageFormRoute === 'infusion';
-  if (!isInjectableContext || state.strengthCandidates.length > 0) return;
+  if (!isInjectionOrInfusionContext(state, dosageFormRoute) || state.strengthCandidates.length > 0) return;
 
   for (let i = 0; i < state.volumeCandidates.length - 1; i += 1) {
     const first = state.volumeCandidates[i];
