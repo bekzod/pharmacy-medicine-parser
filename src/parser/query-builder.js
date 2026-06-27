@@ -502,13 +502,13 @@ function buildBrandOnlyNameSimilarityExpression(columnExpr, includeTrigram) {
 function buildCandidateIdBranches(candidateBaseConditions, candidateJoinSql, candidatePredicates) {
   return candidatePredicates
     .map(
-      (predicate) => `(
+      (predicate, index) => `SELECT id FROM (
         SELECT m.id
         FROM medicines m
         ${candidateJoinSql}
         WHERE ${[...candidateBaseConditions, predicate].join('\n          AND ')}
         LIMIT :candidateLimit
-      )`,
+      ) candidate_id_branch_${index}`,
     )
     .join('\n      UNION\n      ');
 }

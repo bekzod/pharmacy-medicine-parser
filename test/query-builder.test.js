@@ -167,6 +167,15 @@ test('wet wipes keep name fallback search', () => {
   );
 });
 
+test('brand-only candidate union keeps limited branches valid for PostgreSQL', () => {
+  const parsed = parseMedicineQuery('Детские Влажные салфетки гигиенические Cotton Club №25');
+  const searchQuery = buildMedicineSearchQuery(parsed, { limit: 5 });
+
+  assert.ok(searchQuery.sql.includes('candidate_ids AS MATERIALIZED'));
+  assert.ok(searchQuery.sql.includes('SELECT id FROM (\n        SELECT m.id'));
+  assert.ok(!searchQuery.sql.includes(')\n      UNION\n      ('));
+});
+
 test('strict fallback combines multiple ratio strengths for catalog strength columns', () => {
   const parsed = parseMedicineQuery('Бримоптик капли 2мг/мл+5мг/мл 10мл');
   const searchQuery = buildMedicineSearchQuery(parsed, {
