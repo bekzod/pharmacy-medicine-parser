@@ -849,6 +849,17 @@ function inferLiquidActivityUnitPackageRatio(strengths, volumes, dosageForm, nor
   };
 }
 
+function buildPerDoseRatioStrength(strength, value = strength.value) {
+  return {
+    ...strength,
+    kind: 'ratio',
+    text: `${formatNormalizedNumber(value)} ${strength.unit}/доз`,
+    values: [value],
+    value,
+    denominator: { value: null, unit: 'доз' },
+  };
+}
+
 function inferMeteredDoseStrengths(strengths, volumes, dosageForm) {
   if (dosageForm !== 'aerosol' && dosageForm !== 'inhaler' && dosageForm !== 'spray') {
     return { strengths, volumes };
@@ -882,14 +893,7 @@ function inferMeteredDoseStrengths(strengths, volumes, dosageForm) {
     return {
       strengths: (strengths || []).flatMap((strength) =>
         strength === strengthToConvert
-          ? strength.values.map((value) => ({
-              kind: 'ratio',
-              text: `${formatNormalizedNumber(value)} ${strength.unit}/доз`,
-              values: [value],
-              value,
-              unit: strength.unit,
-              denominator: { value: null, unit: 'доз' },
-            }))
+          ? strength.values.map((value) => buildPerDoseRatioStrength(strength, value))
           : [strength],
       ),
       volumes,
@@ -909,11 +913,7 @@ function inferMeteredDoseStrengths(strengths, volumes, dosageForm) {
     return {
       strengths: (strengths || []).map((strength) =>
         strength === strengthToConvert
-          ? {
-              ...strength,
-              text: `${formatNormalizedNumber(strength.value)} ${strength.unit}/доз`,
-              denominator: { value: null, unit: 'доз' },
-            }
+          ? buildPerDoseRatioStrength(strength)
           : strength,
       ),
       volumes,
@@ -923,14 +923,7 @@ function inferMeteredDoseStrengths(strengths, volumes, dosageForm) {
   const strengthToConvert = simpleStrengths[0];
   return {
     strengths: (strengths || []).map((strength) =>
-      strength === strengthToConvert
-        ? {
-            ...strength,
-            kind: 'ratio',
-            text: `${formatNormalizedNumber(strength.value)} ${strength.unit}/доз`,
-            denominator: { value: null, unit: 'доз' },
-          }
-        : strength,
+      strength === strengthToConvert ? buildPerDoseRatioStrength(strength) : strength,
     ),
     volumes,
   };

@@ -154,14 +154,7 @@ function maybeInferVitaminDStrength({ state, tradeNameTokens }) {
 
   if (strengthIndex == null) return;
 
-  const strengthNode = buildSimpleStrengthNode(
-    [tokens[strengthIndex].numericValue],
-    'ме',
-    strengthIndex,
-    strengthIndex,
-  );
-  state.addStrength(strengthNode);
-  state.consume(strengthIndex, 'strength');
+  addSingleTokenStrength(state, strengthIndex, 'ме');
 
   if (
     state.packCount != null &&
@@ -220,14 +213,7 @@ function maybeInferEnzymeActivityStrength({ state, tradeNameTokens }) {
   });
   if (strengthIndex == null) return;
 
-  const strengthNode = buildSimpleStrengthNode(
-    [tokens[strengthIndex].numericValue],
-    'ед',
-    strengthIndex,
-    strengthIndex,
-  );
-  state.addStrength(strengthNode);
-  state.consume(strengthIndex, 'strength');
+  addSingleTokenStrength(state, strengthIndex, 'ед');
 }
 
 // Oral solid forms (tablet, capsule, etc.) where pharmacy listings often
@@ -335,6 +321,13 @@ function dropPromotedTradeNameValues(tradeNameTokens, values) {
   for (let i = tradeNameTokens.length - 1; i >= 0; i -= 1) {
     if (promotedValues.has(String(tradeNameTokens[i]))) tradeNameTokens.splice(i, 1);
   }
+}
+
+function addSingleTokenStrength(state, index, unit, tradeNameTokens = null) {
+  const token = state.tokens[index];
+  state.addStrength(buildSimpleStrengthNode([token.numericValue], unit, index, index));
+  state.consume(index, 'strength');
+  if (tradeNameTokens) dropPromotedTradeNameValues(tradeNameTokens, [token.value]);
 }
 
 function replaceSimpleStrengthUnit(state, index, strength, unit) {
@@ -445,18 +438,9 @@ function maybeInferOralSolidStrength({ state, tradeNameTokens }) {
   });
   if (strengthIndex == null) return;
 
-  const strengthNode = buildSimpleStrengthNode(
-    [tokens[strengthIndex].numericValue],
-    rule.unit,
-    strengthIndex,
-    strengthIndex,
-  );
-  state.addStrength(strengthNode);
-  state.consume(strengthIndex, 'strength');
-
   // Trade-name tokens were collected from residue earlier — drop the just-
   // promoted strength value so it doesn't appear in both fields.
-  dropPromotedTradeNameValues(tradeNameTokens, [tokens[strengthIndex].value]);
+  addSingleTokenStrength(state, strengthIndex, rule.unit, tradeNameTokens);
 }
 
 function fixExplicitOralSolidGramShorthand({ state, tradeNameTokens }) {
@@ -644,15 +628,7 @@ function maybeInferPowderGramStrength({ state, tradeNameTokens }) {
   });
   if (strengthIndex == null) return;
 
-  const strengthNode = buildSimpleStrengthNode(
-    [tokens[strengthIndex].numericValue],
-    'г',
-    strengthIndex,
-    strengthIndex,
-  );
-  state.addStrength(strengthNode);
-  state.consume(strengthIndex, 'strength');
-  dropPromotedTradeNameValues(tradeNameTokens, [tokens[strengthIndex].value]);
+  addSingleTokenStrength(state, strengthIndex, 'г', tradeNameTokens);
 }
 
 function maybeInferPowderMilligramStrength({
@@ -677,15 +653,7 @@ function maybeInferPowderMilligramStrength({
   });
   if (strengthIndex == null) return;
 
-  const strengthNode = buildSimpleStrengthNode(
-    [tokens[strengthIndex].numericValue],
-    'мг',
-    strengthIndex,
-    strengthIndex,
-  );
-  state.addStrength(strengthNode);
-  state.consume(strengthIndex, 'strength');
-  dropPromotedTradeNameValues(tradeNameTokens, [tokens[strengthIndex].value]);
+  addSingleTokenStrength(state, strengthIndex, 'мг', tradeNameTokens);
 }
 
 const CONCENTRATE_RE = /(?<![а-яё])конц(?:\.|ентрат[а-я]*)?/iu;
