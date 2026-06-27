@@ -265,6 +265,9 @@ function normalizeMedicineQuery(rawQuery) {
     // letters before the hyphen and \u22652 digits after to preserve ingredient/
     // vitamin patterns like "\u0414-3", "\u0412-12", "\u03c9-3", "\u043e\u043c\u0435\u0433\u0430-3".
     .replace(/([\p{L}]{4,})-(\d{2,})(?![\p{L}\d])/gu, '$1 $2')
+    // Split release-form suffixes glued to a brand ("азимакс-мR" -> "азимакс мR")
+    // so abbreviation aliases can normalize mixed Cyrillic/Latin MR.
+    .replace(/([\p{L}]{4,})-((?:[мm][рr])|ср|sr|дср|dsr)(?![\p{L}\d])/giu, '$1 $2')
     .replace(/([\p{L}]{3,})-[мm](?=\s|$)/giu, '$1 м')
     .replace(/([\p{L}]{4,})-кап(?=\s*\.?\s*(?:глаз|уш|наз))/giu, '$1 кап')
     .replace(/(?<![\p{L}\d])[hн](\d+(?:\.\d+)?)(?=\s*(?:мг|мкг|г|%)(?![\p{L}\d]))/giu, '$1')
