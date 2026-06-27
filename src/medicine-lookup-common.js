@@ -3,6 +3,8 @@ const { LATIN_TO_CYRILLIC, LATIN_HOMOGLYPH_RE } = require('./latin-to-cyrillic')
 const TRADE_NAME_ABBREV_TOKEN_ALIASES = new Map([
   ['ср', 'sr'],
   ['мр', 'mr'],
+  ['мr', 'mr'],
+  ['mр', 'mr'],
   ['дср', 'dsr'],
   ['хлоргексидина', 'хлоргексидин'],
   ['линкомицина', 'линкомицин'],

@@ -105,6 +105,13 @@ function addCases(cases) {
 }
 
 const implicitStrengthCases = [
+  ['splits hyphenated MR suffixes from Cyrillic trade names', 'азимакс-мR сусп. 200мг/5мл 15мл', {
+  trade_name_text: 'азимакс mr',
+  trade_name_tokens: ['азимакс', 'mr'],
+  dosage_form: 'suspension',
+  strengths: [ratio('200 мг/5 мл', [200], 200, 'мг', { value: 5, unit: 'мл' })],
+  volumes: [volume('15 мл', 15, 'мл')]
+}],
   ['infers bare L-тироксин tablet strengths as micrograms', 'L-тироксин 100 берлин-хеми таб №50', {
   trade_name_text: 'l-тироксин берлин-хеми',
   dosage_form: 'tablet',
