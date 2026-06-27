@@ -13,7 +13,28 @@ function isPlainAnnotationToken(token) {
   );
 }
 
-function addAnnotationNoiseTokens(noise, annotationText) {
+// Wholesale listings sometimes write "<short code> (<active ingredient>)", e.g.
+// "ПЕО (цефтриаксон)" — the parenthesized ingredient is the product's real
+// identity and must be kept, not treated as noise. Short variant tags like
+// "форте" are handled separately by PARENTHESIZED_VARIANT_TOKENS. We approximate
+// the case as a short (2-3 char) leading code followed by a single longer
+// Cyrillic word.
+function isSingleCyrillicWord(tokens) {
+  return (
+    tokens.length === 1 &&
+    tokens[0]?.type === 'WORD' &&
+    /^[а-яё-]{5,}$/iu.test(tokens[0].normalizedValue || tokens[0].value || '')
+  );
+}
+
+function hasShortLeadingBrand(prefixText) {
+  const prefixTokens = tokenizeMedicineQuery(prefixText);
+  if (prefixTokens.length !== 1 || prefixTokens[0]?.type !== 'WORD') return false;
+  const len = (prefixTokens[0].normalizedValue || prefixTokens[0].value || '').length;
+  return len >= 2 && len <= 3;
+}
+
+function addAnnotationNoiseTokens(noise, annotationText, options = {}) {
   if (!annotationText || !annotationText.trim()) return;
 
   const annotationTokens = tokenizeMedicineQuery(annotationText);
@@ -25,6 +46,14 @@ function addAnnotationNoiseTokens(noise, annotationText) {
   }
 
   if (annotationTokens.every(isPlainAnnotationToken)) {
+    if (
+      options.leadingPrefix !== undefined &&
+      isSingleCyrillicWord(annotationTokens) &&
+      hasShortLeadingBrand(options.leadingPrefix)
+    ) {
+      return;
+    }
+
     for (const token of annotationTokens) {
       const value = token.normalizedValue || token.value;
       if (!PARENTHESIZED_VARIANT_TOKENS.has(value)) {
@@ -73,7 +102,9 @@ function collectAnnotationNoiseTokens(rawQuery) {
     PAREN_GROUP_RE.lastIndex = 0;
     let match;
     while ((match = PAREN_GROUP_RE.exec(text)) !== null) {
-      addAnnotationNoiseTokens(noise, match[1]);
+      addAnnotationNoiseTokens(noise, match[1], {
+        leadingPrefix: text.slice(0, match.index),
+      });
     }
   }
 

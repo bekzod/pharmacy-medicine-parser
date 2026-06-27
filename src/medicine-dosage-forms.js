@@ -301,11 +301,11 @@ const MEDICINE_DOSAGE_FORMS = [
   { form: 'lyophilisate', parsePatterns: [/лиоф\.?\s*д\/пр/iu, /лиоф\.\s*пор\.\s*д\/ин/iu] },
   {
     form: 'solution',
-    parsePatterns: [wholeToken('жид\\.?'), /жидкост/iu],
+    parsePatterns: [wholeToken('жид\\.?'), /жидкост/iu, wholeToken('liquid')],
     profile: {
       token: 'жид',
       priority: 1,
-      tokenPatterns: [/^(жид\.?|жидкост[а-я]*)$/u],
+      tokenPatterns: [/^(жид\.?|жидкост[а-я]*)$/u, /^liquid$/u],
     },
   },
   {
