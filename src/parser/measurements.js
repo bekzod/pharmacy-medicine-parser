@@ -1,5 +1,7 @@
 const { UNIT_FAMILY_BY_VALUE } = require('./constants');
 
+const TRAILING_UNIT_COMBINATION_FORMS = new Set(['tablet', 'capsule', 'pastille', 'granule']);
+
 function buildMeasurementNode(numberToken, unitToken, startIndex, endIndex) {
   return {
     text: `${numberToken.value} ${unitToken.normalizedValue}`,
@@ -285,6 +287,38 @@ function buildSingleStrengthComponent(tokens, startIndex) {
 }
 
 function buildCombinationStrengthCandidate(tokens, startIndex) {
+  if (tokens[startIndex]?.type === 'NUMBER' && tokens[startIndex + 1]?.type === 'PLUS') {
+    const previousDosageForm = tokens[startIndex - 1]?.dosageForm;
+    const numbers = [{ token: tokens[startIndex], index: startIndex }];
+    let cursor = startIndex + 1;
+
+    while (tokens[cursor]?.type === 'PLUS' && tokens[cursor + 1]?.type === 'NUMBER') {
+      numbers.push({ token: tokens[cursor + 1], index: cursor + 1 });
+      cursor += 2;
+    }
+
+    const trailingUnitToken = tokens[cursor];
+    const trailingUnit =
+      trailingUnitToken?.type === 'UNIT'
+        ? trailingUnitToken.normalizedValue
+        : trailingUnitToken?.type === 'PERCENT'
+          ? '%'
+          : null;
+
+    if (
+      numbers.length >= 2 &&
+      trailingUnit &&
+      tokens[cursor + 1]?.type !== 'SLASH' &&
+      TRAILING_UNIT_COMBINATION_FORMS.has(previousDosageForm) &&
+      UNIT_FAMILY_BY_VALUE.get(trailingUnit) !== 'volume'
+    ) {
+      const components = numbers.map(({ token, index }) =>
+        buildSimpleStrengthNode([Number.parseFloat(token.value)], trailingUnit, index, index),
+      );
+      return buildCombinationStrengthNode(components, startIndex, cursor);
+    }
+  }
+
   const firstComponent = buildSingleStrengthComponent(tokens, startIndex);
   if (!firstComponent) return null;
 

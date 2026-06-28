@@ -413,6 +413,12 @@ const implicitStrengthCases = [
   trade_name_text: 'цефотаксим',
   strengths: [ { kind: 'simple', text: '1 г', values: [ 1 ], value: 1, unit: 'г' } ]
 }],
+  ['drops misspelled injection-purpose tokens from powder listings', 'эфес пор.д/приг.р-ра для иньекций 5,0г №1', {
+  trade_name_text: 'эфес',
+  dosage_form: 'powder',
+  strengths: [ { kind: 'simple', text: '5 г', values: [ 5 ], value: 5, unit: 'г' } ],
+  pack_count: 1
+}],
   ['infers bare milligram strength for known powder sachet brands', 'Ноофен порошок 500 №5', {
   trade_name_text: 'ноофен',
   dosage_form: 'powder',
@@ -500,6 +506,20 @@ const deviceAndProductTypeCases = [
   product_type: 'other',
   dosage_form: null,
   trade_name_tokens: [ 'бонди', 'детс', 'печ', 'с', 'железом', '180р' ]
+}],
+  ['keeps quoted Latin personal-care brands out of Cyrillic homoglyph normalization', 'Подгузники детс."Pure Born" р.5 №22', {
+  product_type: 'other',
+  dosage_form: null,
+  trade_name_text: 'подгузники детс pure born р 5',
+  trade_name_tokens: [ 'подгузники', 'детс', 'pure', 'born', 'р' ],
+  pack_count: 22
+}],
+  ['normalizes mixed-script personal-care brand aliases', 'ТАМПОНЫ ГИГИЕН. EСЕНИЯ ДЛИННАЯ №10', {
+  product_type: 'other',
+  dosage_form: null,
+  trade_name_text: 'тампоны гигиенические есения длинная',
+  trade_name_tokens: [ 'тампоны', 'гигиенические', 'есения', 'длинная' ],
+  pack_count: 10
 }],
   ['classifies liquid soap listings as non-medicine products', 'Жидкое мыло.Океан с дозатором 300мл№1 Life', {
   product_type: 'other',
@@ -1137,6 +1157,12 @@ const measurementAndRouteCases = [
   strengths: [ { kind: 'simple', text: '10 мг', values: [ 10 ], value: 10, unit: 'мг' } ],
   pack_count: 30
 }],
+  ['prefers outer pack marker over parenthesized blister count', 'Ранит №100 таб. (№10*10) (Ранитидин 150 мг)', {
+  trade_name_text: 'ранит',
+  dosage_form: 'tablet',
+  strengths: [ { kind: 'simple', text: '150 мг', values: [ 150 ], value: 150, unit: 'мг' } ],
+  pack_count: 100
+}],
   ['parses compact injectable powder abbreviation with gram strength', 'эфес пор.д/приг.р-ра д/инъек.5,0г №1', {
   trade_name_text: 'эфес',
   dosage_form: 'powder',
@@ -1285,6 +1311,18 @@ const measurementAndRouteCases = [
     options: { limit: 5, requireParsedAttributeMatch: true, strictParsedAttributeFilters: true },
     replacementValuesInclude: [ '10/20 мг', '30 мг', '0.03 г', '0,03 г' ]
   }
+}],
+  ['parses trailing-unit plus strengths as combination components', 'Эналозид 25 таб 25+10мг №20', {
+  trade_name_text: 'эналозид 25',
+  dosage_form: 'tablet',
+  strengths: [
+    {
+      kind: 'combination',
+      text: '25 мг + 10 мг',
+      components: [ { value: 25, unit: 'мг' }, { value: 10, unit: 'мг' } ]
+    }
+  ],
+  pack_count: 20
 }],
   ['drops trailing generic annotation after ampoule pack count', 'авикарнитин амп.200мг/5мл№5 левокарнитин', {
   trade_name_text: 'авикарнитин',

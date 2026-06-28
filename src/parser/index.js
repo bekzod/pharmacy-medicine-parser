@@ -164,19 +164,39 @@ function normalizeSizeContextTokens(tokens) {
   }
 }
 
+function isInsideParenthetical(text, index) {
+  let depth = 0;
+  for (let i = 0; i < index; i += 1) {
+    const char = text[i];
+    if (char === '(' || char === '[' || char === '{') depth += 1;
+    if ((char === ')' || char === ']' || char === '}') && depth > 0) depth -= 1;
+  }
+  return depth > 0;
+}
+
 function extractRawPackCounts(rawQuery, state) {
   let hasRawPackMultiplier = false;
-  for (const match of (rawQuery || '').matchAll(/№\s*(\d+)\s*[хx×]\s*(\d+)/giu)) {
+  const text = String(rawQuery || '');
+  let outsidePackCount = null;
+  let parentheticalPackCount = null;
+
+  for (const match of text.matchAll(/№\s*(\d+)(?:\s*[хx×]\s*(\d+))?/giu)) {
     const left = Number.parseInt(match[1], 10);
-    const right = Number.parseInt(match[2], 10);
-    if (Number.isFinite(left) && Number.isFinite(right) && left > 0 && right > 0) {
-      state.setPackCount(left * right);
-      hasRawPackMultiplier = true;
+    const right = match[2] == null ? null : Number.parseInt(match[2], 10);
+    if (!Number.isFinite(left) || left <= 0) continue;
+    if (right != null && (!Number.isFinite(right) || right <= 0)) continue;
+    if (right != null) hasRawPackMultiplier = true;
+
+    const packCount = right == null ? left : left * right;
+    if (isInsideParenthetical(text, match.index || 0)) {
+      if (parentheticalPackCount == null) parentheticalPackCount = packCount;
+    } else {
+      outsidePackCount = packCount;
     }
   }
-  for (const match of (rawQuery || '').matchAll(/№\s*(\d+)(?!\d)(?!\s*[хx×]\s*\d)/giu)) {
-    state.setPackCount(Number.parseInt(match[1], 10));
-  }
+
+  if (outsidePackCount != null) state.setPackCount(outsidePackCount);
+  else if (parentheticalPackCount != null) state.setPackCount(parentheticalPackCount);
   return hasRawPackMultiplier;
 }
 
@@ -879,6 +899,19 @@ function stripPackMultipliersFromTradeName(fullTradeName, state, tokens) {
   return stripped;
 }
 
+function dropPackagedOtherProductSizeNumbers(tokens) {
+  return tokens.filter((token, index) => {
+    const previous = tokens[index - 1];
+    const value = Number.parseFloat(token);
+    return !(
+      SIZE_CONTEXT_TOKENS.has(previous) &&
+      Number.isFinite(value) &&
+      value > 0 &&
+      value <= 20
+    );
+  });
+}
+
 function assembleParsedQuery({
   rawQuery,
   normalizedText,
@@ -920,11 +953,15 @@ function assembleParsedQuery({
     const fullTradeName = stripPackMultipliersFromTradeName(normalizedText || null, state, tokens);
     const useFullTradeNameTokens = productType === 'device';
     const isCottonProduct = normalizedTradeNameTokens.includes('вата');
-    const fullTradeNameTokens =
+    const baseFullTradeNameTokens =
       (tradeNameTokens.length && !useFullTradeNameTokens) || !fullTradeName
         ? normalizedTradeNameTokens
         : normalizeTradeNameAbbrevTokens(fullTradeName.split(/\s+/u).filter(Boolean));
-    const fullTradeNameText = fullTradeNameTokens.join(' ').trim() || null;
+    const fullTradeNameTokens =
+      productType === 'other' && state.packCount != null
+        ? dropPackagedOtherProductSizeNumbers(baseFullTradeNameTokens)
+        : baseFullTradeNameTokens;
+    const fullTradeNameText = baseFullTradeNameTokens.join(' ').trim() || null;
     return {
       rawQuery: rawQuery || '',
       normalizedText,
