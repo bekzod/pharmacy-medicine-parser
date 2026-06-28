@@ -537,7 +537,7 @@ function inferInhalationPerDoseStrengths(strengths, normalizedText, dosageForm) 
   });
 }
 
-function inferCompactPlusSharedDenominatorRatios(strengths, normalizedText) {
+function inferCompactPlusSharedDenominatorRatios(strengths, normalizedText, dosageForm = null) {
   const match = String(normalizedText || '').match(
     /(\d+(?:\.\d+)?)\s*\+\s*(\d+(?:\.\d+)?)\s*(мг|мкг|г)\s*\/\s*(мл|г|доз)(?=$|[^\p{L}\p{N}])/u,
   );
@@ -554,6 +554,20 @@ function inferCompactPlusSharedDenominatorRatios(strengths, normalizedText) {
       strength.values.every((value, index) => value === values[index]),
   );
   if (!compact) return strengths;
+
+  if (dosageForm === 'drops') {
+    return (strengths || []).map((strength) =>
+      strength === compact
+        ? buildRatioStrengthNode(
+            values,
+            unit,
+            { value: null, unit: denominatorUnit },
+            compact.startIndex,
+            compact.endIndex,
+          )
+        : strength,
+    );
+  }
 
   return (strengths || []).flatMap((strength) =>
     strength === compact

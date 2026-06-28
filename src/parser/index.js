@@ -835,7 +835,7 @@ function buildPublicMeasurements(state, normalizedText) {
   );
   strengths = fixOralSolidMlStrengthTypo(strengths, state.dosageForm);
   strengths = mergeSameUnitSlashStrength(strengths, normalizedText);
-  strengths = inferCompactPlusSharedDenominatorRatios(strengths, normalizedText);
+  strengths = inferCompactPlusSharedDenominatorRatios(strengths, normalizedText, state.dosageForm);
   strengths = inferInhalationPerDoseStrengths(strengths, normalizedText, state.dosageForm);
   let volumes = dedupePublicNodes(
     state.volumeCandidates.map(toPublicMeasurementNode).filter(Boolean),

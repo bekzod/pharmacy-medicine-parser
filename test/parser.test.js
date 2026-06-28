@@ -467,6 +467,12 @@ const implicitStrengthCases = [
   trade_name_text: 'цефтриаксон сульбактам',
   strengths: [ { kind: 'simple', text: '1 г/0.5 г', values: [ 1, 0.5 ], value: null, unit: 'г' } ]
 }],
+  ['parses compact plus-separated ratios with a shared trailing unit', 'Комбинил капли 5+10 мг/мл 5мл', {
+  trade_name_text: 'комбинил',
+  dosage_form: 'drops',
+  strengths: [ratio('5/10 мг/мл', [5, 10], null, 'мг', { value: null, unit: 'мл' })],
+  volumes: [volume('5 мл', 5, 'мл')]
+}],
 ];
 
 const deviceAndProductTypeCases = [
