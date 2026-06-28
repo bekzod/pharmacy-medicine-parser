@@ -48,7 +48,7 @@ function normalizeSqlTerm(value) {
   return normalizeText(value, 'sql');
 }
 
-const HOMOGLYPH_WORD_RE = /[\p{L}\p{N}]+(?:['\u2019-][\p{L}\p{N}]+)*/gu;
+const HOMOGLYPH_WORD_RE = /[\p{L}\p{N}]+(?:[.'\u2019-][\p{L}\p{N}]+)*/gu;
 
 function normalizeLatinHomoglyphs(text) {
   return String(text || '').replace(HOMOGLYPH_WORD_RE, (word) => {

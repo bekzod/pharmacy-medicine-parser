@@ -138,6 +138,14 @@ const implicitStrengthCases = [
   volumes: [volume('5 мл', 5, 'мл')],
   pack_count: 25
 }],
+  ['normalizes mixed-script dotted Carry F.A. injection brand spelling', 'Карри Ф.A. амп.1г/5мл№25 (Л-Карнитин)', {
+  trade_name_text: 'carry f a',
+  dosage_form: 'injection',
+  container_type: 'ampoule',
+  strengths: [ ratio('1 г/5 мл', [1], 1, 'г', { value: 5, unit: 'мл' }) ],
+  volumes: [volume('5 мл', 5, 'мл')],
+  pack_count: 25
+}],
   ['preserves duplicate components in same-unit slash strengths', 'ЭКВАМЕР КАПС. 20МГ/10МГ/10МГ №30', {
   trade_name_text: 'эквамер',
   dosage_form: 'capsule',
