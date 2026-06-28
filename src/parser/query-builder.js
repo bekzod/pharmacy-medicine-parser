@@ -363,29 +363,36 @@ function addSameUnitMultiValueStrengthTexts(values, strength) {
   addSameUnitComponentTextVariants(values, numericValues, strength.unit);
 }
 
-function normalizeRatioStrengthComponent(strength) {
-  if (strength?.kind !== 'ratio' || strength.value == null || !strength.unit) return null;
-  const numerator = normalizeMeasurementValue(strength.value, strength.unit);
-  const denominator = normalizeMeasurementValue(
-    strength.denominator?.value == null ? 1 : strength.denominator.value,
-    strength.denominator?.unit,
-  );
-  if (!numerator || !denominator || denominator.value <= 0) return null;
-  const numeratorText = formatMeasurementNumber(numerator.value);
-  const denominatorText = formatMeasurementNumber(denominator.value);
-  if (!numeratorText || !denominatorText) return null;
+function normalizeRatioStrengthComponents(strength) {
+  if (strength?.kind !== 'ratio' || !strength.unit) return [];
+  const rawValues = strength.value == null ? strength.values : [strength.value];
+  const values = (Array.isArray(rawValues) ? rawValues : [])
+    .map(Number)
+    .filter((value) => Number.isFinite(value));
 
-  return {
-    key: `${numerator.unit}/${denominatorText} ${denominator.unit}`,
-    text:
-      denominator.value === 1
-        ? `${numeratorText} ${numerator.unit}/${denominator.unit}`
-        : `${numeratorText} ${numerator.unit}/${denominatorText} ${denominator.unit}`,
-  };
+  return values.map((value) => {
+    const numerator = normalizeMeasurementValue(value, strength.unit);
+    const denominator = normalizeMeasurementValue(
+      strength.denominator?.value == null ? 1 : strength.denominator.value,
+      strength.denominator?.unit,
+    );
+    if (!numerator || !denominator || denominator.value <= 0) return null;
+    const numeratorText = formatMeasurementNumber(numerator.value);
+    const denominatorText = formatMeasurementNumber(denominator.value);
+    if (!numeratorText || !denominatorText) return null;
+
+    return {
+      key: `${numerator.unit}/${denominatorText} ${denominator.unit}`,
+      text:
+        denominator.value === 1
+          ? `${numeratorText} ${numerator.unit}/${denominator.unit}`
+          : `${numeratorText} ${numerator.unit}/${denominatorText} ${denominator.unit}`,
+    };
+  }).filter(Boolean);
 }
 
 function addSameDenominatorRatioStrengthTexts(values, strengths) {
-  const components = (strengths || []).map(normalizeRatioStrengthComponent).filter(Boolean);
+  const components = (strengths || []).flatMap(normalizeRatioStrengthComponents);
   if (components.length < 2) return;
 
   const grouped = new Map();

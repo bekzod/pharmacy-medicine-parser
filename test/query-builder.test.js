@@ -195,6 +195,25 @@ test('strict fallback combines multiple ratio strengths for catalog strength col
   );
 });
 
+test('strict fallback combines compact multi-value ratio strengths for catalog strength columns', () => {
+  const parsed = parseMedicineQuery('Комбинил капли 5+10 мг/мл 5мл');
+  const searchQuery = buildMedicineSearchQuery(parsed, {
+    limit: 5,
+    requireParsedAttributeMatch: true,
+    strictParsedAttributeFilters: true,
+  });
+
+  const replacementValues = Object.values(searchQuery.replacements);
+  assert.ok(
+    replacementValues.includes('5 мг/мл+10 мг/мл'),
+    'expected plus-joined same-denominator ratio text',
+  );
+  assert.ok(
+    replacementValues.includes('5 мг/мл, 10 мг/мл'),
+    'expected comma-joined same-denominator ratio text',
+  );
+});
+
 test('strict pack-one recall admits null pack for standalone mass products', () => {
   const parsed = parseMedicineQuery('Вата мед. н/с 100г №1');
   const searchQuery = buildMedicineSearchQuery(parsed, {
