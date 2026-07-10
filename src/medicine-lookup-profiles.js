@@ -446,8 +446,8 @@ function buildLookupProfile(kind, parsed, rawName) {
   };
 }
 
-function buildQueryLookupProfiles(rawName, overrides = {}) {
-  const parsed = applyAttributeOverrides(parseMedicineQuery(rawName), overrides);
+function buildQueryLookupProfiles(rawName, overrides = {}, parseQuery = parseMedicineQuery) {
+  const parsed = applyAttributeOverrides(parseQuery(rawName), overrides);
   const profiles = [];
   const seen = new Set();
 

@@ -321,6 +321,23 @@ test('F044 lookup profiles include structured, trade-only, and brand-only modes'
   );
 });
 
+test('F044a lookup profiles accept an injected parser', () => {
+  const parseQuery = () => ({
+    rawQuery: 'custom',
+    normalizedText: 'custom',
+    tokens: [],
+    residueTokens: ['custom'],
+    attributes: {
+      trade_name_text: 'custom',
+      trade_name_tokens: ['custom'],
+      strengths: [],
+      volumes: [],
+    },
+  });
+  const profiles = lookup.buildQueryLookupProfiles('ignored', {}, parseQuery);
+  assert.equal(profiles[0].parsed.attributes.trade_name_text, 'custom');
+});
+
 test('F045 search aliases include fuzzy generated text', () => {
   const aliases = lookup.buildMedicineSearchAliases('Ибупрофен, табл., 200 мг, №10', {
     dosage_form: 'tablet',
@@ -452,6 +469,9 @@ test('F059 Latin homoglyph normalization only changes mixed-script words', () =>
 
 test('F060 vendor country aliases normalize and match', () => {
   assert.equal(vendorCountry.normalizeVendorCountry('germany'), 'германия');
+  assert.equal(vendorCountry.normalizeVendorCountry('Швецария'), 'швейцария');
+  assert.equal(vendorCountry.normalizeVendorCountry('San Marino'), 'сан-марино');
+  assert.ok(vendorCountry.getVendorCountrySearchTerms('USA').includes('united states'));
   assert.equal(vendorCountry.vendorCountryMatches('Germany', 'Германия'), true);
 });
 
@@ -459,6 +479,9 @@ test('F061 exported constants and maps are available to consumers', () => {
   assert.equal(latin.LATIN_TO_CYRILLIC.a, 'а');
   assert.ok(latin.LATIN_HOMOGLYPH_RE.test('a'));
   assert.equal(common.TRADE_NAME_ABBREV_TOKEN_ALIASES.get('мр'), 'mr');
+  assert.equal(common.TRADE_NAME_ABBREV_TOKEN_ALIASES.get('ртути'), 'ртутный');
+  assert.equal(fuzzy.LATIN_TO_CYRILLIC_TRANSLIT_SINGLE.a, 'а');
+  assert.deepEqual(fuzzy.buildLatinMedicinePhoneticVariants('parasitamol'), ['paracetamol']);
   assert.ok(nameProfile.MEDICINE_UNIT_TOKENS.has('мг'));
 });
 

@@ -340,6 +340,14 @@ function buildMedicinePhoneticVariants(value, replacements) {
   return [...new Set(variants)];
 }
 
+function buildLatinMedicinePhoneticVariants(value) {
+  return buildMedicinePhoneticVariants(value, LATIN_MEDICINE_PHONETIC_REPLACEMENTS);
+}
+
+function buildCyrillicMedicinePhoneticVariants(value) {
+  return buildMedicinePhoneticVariants(value, CYRILLIC_MEDICINE_PHONETIC_REPLACEMENTS);
+}
+
 function buildQueryVariants(rawQuery) {
   const original = normalizeQuery(rawQuery);
   const layoutConverted = normalizeQuery(convertLatinLayoutToCyrillic(rawQuery));
@@ -374,7 +382,12 @@ function buildQueryVariants(rawQuery) {
 
 module.exports = {
   buildQueryVariants,
+  buildLatinMedicinePhoneticVariants,
+  buildCyrillicMedicinePhoneticVariants,
   normalizeMedicineFormPhrases,
   normalizeQuery,
+  normalizeLatinDominantMixedScriptTokens,
   transliterateLatinToCyrillic,
+  LATIN_TO_CYRILLIC_TRANSLIT_SINGLE,
+  LATIN_TO_CYRILLIC_TRANSLIT_MULTI,
 };
