@@ -58,6 +58,7 @@ const VENDOR_TABLE_COUNTRIES = [
   'пуэрто рико',
   'россия',
   'румыния',
+  'сан-марино',
   'саудовская аравия',
   'северная корея',
   'сербия',
@@ -87,10 +88,20 @@ const VENDOR_TABLE_COUNTRIES = [
 ];
 
 const COUNTRY_ALIAS_GROUPS = [
-  ['индия', 'india', 'хиндистон'],
+  ['индия', 'india', 'indiya', 'yndyya', 'ин', 'хиндистон'],
   ['узбекистан', 'uzbekistan', 'uzbekiston', 'uz', 'uzb', 'узб', 'узбекистон'],
-  ['китай', 'china', 'cn', 'хитой'],
-  ['сша', 'usa', 'us', 'соединенные штаты', 'соединенные штаты америки', 'аксш'],
+  ['китай', 'china', 'cn', 'кнр', 'хитой'],
+  [
+    'сша',
+    'usa',
+    'us',
+    'united states',
+    'united states of america',
+    'сша америка',
+    'соединенные штаты',
+    'соединенные штаты америки',
+    'аксш',
+  ],
   [
     'россия',
     'russia',
@@ -106,14 +117,14 @@ const COUNTRY_ALIAS_GROUPS = [
   ['италия', 'italy', 'итальян'],
   ['испания', 'spain'],
   ['украина', 'ukraine'],
-  ['беларусь', 'belarus', 'белоруссия', 'беларус'],
+  ['беларусь', 'belarus', 'белоруссия', 'белорусия', 'беларусия', 'беларус'],
   ['казахстан', 'kazakhstan', 'қозоғистон', 'козогистон'],
   ['кыргызстан', 'kyrgyzstan', 'киргизия', 'қирғизистон', 'киргизистон'],
   ['таджикистан', 'tajikistan', 'тожикистон'],
   ['армения', 'armenia', 'арманистон'],
   ['грузия', 'georgia', 'гуржистон'],
   ['польша', 'poland', 'полша'],
-  ['швейцария', 'switzerland'],
+  ['швейцария', 'switzerland', 'швецария'],
   ['словения', 'slovenia'],
   ['венгрия', 'hungary', 'мажористон'],
   [
@@ -131,7 +142,7 @@ const COUNTRY_ALIAS_GROUPS = [
   ['иран', 'iran', 'эрон'],
   ['ирак', 'iraq', 'ироқ', 'ирок'],
   ['израиль', 'israel', 'исроил'],
-  ['великобритания', 'uk', 'united kingdom', 'англия', 'буюк британия'],
+  ['великобритания', 'uk', 'united kingdom', 'англия', 'анг', 'британия', 'буюк британия'],
   ['австрия', 'austria'],
   ['нидерланды', 'netherlands', 'голландия', 'нидерландия'],
   ['финляндия', 'finland'],
@@ -141,6 +152,7 @@ const COUNTRY_ALIAS_GROUPS = [
   ['словакия', 'slovakia'],
   ['болгария', 'bulgaria'],
   ['румыния', 'romania', 'руминия'],
+  ['сан-марино', 'san marino', 'сан марино'],
   ['хорватия', 'croatia'],
   ['сербия', 'serbia'],
   ['бельгия', 'belgium'],
@@ -148,6 +160,7 @@ const COUNTRY_ALIAS_GROUPS = [
   ['португалия', 'portugal'],
   ['греция', 'greece', 'юнонистон'],
   ['таиланд', 'thailand', 'тайланд', 'тайлянд'],
+  ['тайвань', 'taiwan', 'tayvan'],
   ['вьетнам', 'vietnam'],
   ['малайзия', 'malaysia'],
   ['индонезия', 'indonesia'],
@@ -177,6 +190,18 @@ function normalizeVendorCountry(value) {
   const normalized = normalizeSqlTerm(value);
   if (!normalized) return null;
   return COUNTRY_ALIAS_TO_CANONICAL.get(normalized) || null;
+}
+
+function getVendorCountrySearchTerms(value) {
+  const canonical = normalizeVendorCountry(value);
+  if (!canonical) return [];
+
+  return [
+    canonical,
+    ...[...COUNTRY_ALIAS_TO_CANONICAL.entries()]
+      .filter(([, aliasCanonical]) => aliasCanonical === canonical)
+      .map(([alias]) => alias),
+  ].filter((term, index, terms) => term && terms.indexOf(term) === index);
 }
 
 function extractVendorCountryFromTokens(tokens) {
@@ -226,6 +251,7 @@ function vendorCountryMatches(parsedCountry, candidateCountry) {
 
 module.exports = {
   extractVendorCountryFromTokens,
+  getVendorCountrySearchTerms,
   normalizeVendorCountry,
   vendorCountryMatches,
 };
