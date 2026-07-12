@@ -23,26 +23,18 @@ function classifyProductType(rawQuery, normalizedText, { dosageForm, strengths, 
     hasInjectableRouteSignal ||
     (hasSyringeSignal && hasPrefilledSignal);
 
-  for (const pattern of PRODUCT_TYPE_PATTERNS.medicine) {
-    if (pattern.test(text)) return 'medicine';
-  }
+  if (PRODUCT_TYPE_PATTERNS.medicine.some((pattern) => pattern.test(text))) return 'medicine';
 
-  for (const pattern of PRODUCT_TYPE_PATTERNS.other) {
-    if (pattern.test(text)) return 'other';
-  }
+  if (PRODUCT_TYPE_PATTERNS.other.some((pattern) => pattern.test(text))) return 'other';
 
   if (dosageForm && hasSyringeSignal && hasPrefilledSignal) return 'medicine';
   if (hasPharmaStrength && hasInjectableMedicineSignal) return 'medicine';
 
-  for (const pattern of PRODUCT_TYPE_PATTERNS.devicePrimary) {
-    if (pattern.test(text)) return 'device';
-  }
+  if (PRODUCT_TYPE_PATTERNS.devicePrimary.some((pattern) => pattern.test(text))) return 'device';
 
   if (dosageForm) return 'medicine';
 
-  for (const pattern of PRODUCT_TYPE_PATTERNS.deviceAccessory) {
-    if (pattern.test(text)) return 'device';
-  }
+  if (PRODUCT_TYPE_PATTERNS.deviceAccessory.some((pattern) => pattern.test(text))) return 'device';
 
   if (hasPharmaStrength || hasLiquidVolume) {
     return 'medicine';

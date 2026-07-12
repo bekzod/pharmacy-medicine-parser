@@ -308,9 +308,7 @@ function transliterateLatinToCyrillic(value) {
       }
     }
 
-    if (matched) {
-      continue;
-    }
+    if (matched) continue;
 
     const char = input[index];
     result += LATIN_TO_CYRILLIC_TRANSLIT_SINGLE[char] || char;
@@ -328,16 +326,13 @@ function buildMedicinePhoneticVariants(value, replacements) {
   const normalized = normalizeQuery(value);
   if (!normalized) return [];
 
-  const variants = [];
-
-  for (const [pattern, replacement] of replacements) {
-    const phoneticVariant = normalizeQuery(normalized.replace(pattern, replacement));
-    if (phoneticVariant && phoneticVariant !== normalized) {
-      variants.push(phoneticVariant);
-    }
-  }
-
-  return [...new Set(variants)];
+  return [
+    ...new Set(
+      replacements
+        .map(([pattern, replacement]) => normalizeQuery(normalized.replace(pattern, replacement)))
+        .filter((variant) => variant && variant !== normalized),
+    ),
+  ];
 }
 
 function buildLatinMedicinePhoneticVariants(value) {
@@ -375,7 +370,7 @@ function buildQueryVariants(rawQuery) {
         transliterated,
         ...cyrillicPhoneticVariants,
         ...latinPhoneticVariants,
-      ].filter((variant) => variant.length > 0),
+      ].filter(Boolean),
     ),
   ];
 }

@@ -11,12 +11,11 @@ function isMeaningfulTradeNameWordToken(token, consumedIndexes = null, index = n
 
   const normalizedToken = token.normalizedValue || '';
   if (!normalizedToken) return false;
-  const restoredStandaloneMeterSuffix = normalizedToken === 'м';
 
   return (
     !MEDICINE_DESCRIPTOR_TOKENS.has(normalizedToken) &&
     !MEDICINE_FORM_TOKENS.has(normalizedToken) &&
-    (!MEDICINE_UNIT_TOKENS.has(normalizedToken) || restoredStandaloneMeterSuffix) &&
+    (!MEDICINE_UNIT_TOKENS.has(normalizedToken) || normalizedToken === 'м') &&
     !PARSER_NOISE_TOKENS.has(normalizedToken)
   );
 }

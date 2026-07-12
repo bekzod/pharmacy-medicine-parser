@@ -98,23 +98,18 @@ function collectAnnotationNoiseTokens(rawQuery) {
   const noise = new Set();
   if (!text) return noise;
 
-  if (text.includes('(')) {
-    PAREN_GROUP_RE.lastIndex = 0;
-    let match;
-    while ((match = PAREN_GROUP_RE.exec(text)) !== null) {
-      addAnnotationNoiseTokens(noise, match[1], {
-        leadingPrefix: text.slice(0, match.index),
-      });
-    }
+  PAREN_GROUP_RE.lastIndex = 0;
+  for (const match of text.matchAll(PAREN_GROUP_RE)) {
+    addAnnotationNoiseTokens(noise, match[1], {
+      leadingPrefix: text.slice(0, match.index),
+    });
   }
 
-  if (text.includes('№')) {
-    let suffix = '';
-    for (const match of text.matchAll(/№\s*\d+(?:\s*[хx×]\s*\d+)?/giu)) {
-      suffix = text.slice((match.index || 0) + match[0].length);
-    }
-    addAnnotationNoiseTokens(noise, suffix);
+  let suffix = '';
+  for (const match of text.matchAll(/№\s*\d+(?:\s*[хx×]\s*\d+)?/giu)) {
+    suffix = text.slice((match.index || 0) + match[0].length);
   }
+  addAnnotationNoiseTokens(noise, suffix);
 
   addInlineSprayFlavorNoiseTokens(noise, text.replace(/\([^)]*\)/gu, ' '));
 

@@ -918,7 +918,7 @@ function assembleParsedQuery({
     dosageFormToken = 'сусп';
     dosageFormSource = 'inferred_from_container';
   }
-  let productType = classifyProductType(rawQuery, normalizedText, {
+  const productType = classifyProductType(rawQuery, normalizedText, {
     dosageForm,
     strengths,
     volumes,
@@ -930,50 +930,10 @@ function assembleParsedQuery({
 
   const normalizedTradeNameTokens = normalizeTradeNameAbbrevTokens(tradeNameTokens);
   const tradeNameText = normalizedTradeNameTokens.join(' ').trim() || null;
-  const annotatedTokens = state.annotatedTokens();
-
-  if (isBrandOnlyProductType(productType)) {
-    const fullTradeName = stripPackMultipliersFromTradeName(normalizedText || null, state, tokens);
-    const useFullTradeNameTokens = productType === 'device';
-    const isCottonProduct = normalizedTradeNameTokens.includes('вата');
-    const baseFullTradeNameTokens =
-      (tradeNameTokens.length && !useFullTradeNameTokens) || !fullTradeName
-        ? normalizedTradeNameTokens
-        : normalizeTradeNameAbbrevTokens(fullTradeName.split(/\s+/u).filter(Boolean));
-    const fullTradeNameTokens =
-      productType === 'other' && state.packCount != null
-        ? dropPackagedOtherProductSizeNumbers(baseFullTradeNameTokens)
-        : baseFullTradeNameTokens;
-    const fullTradeNameText = baseFullTradeNameTokens.join(' ').trim() || null;
-    return {
-      rawQuery: rawQuery || '',
-      normalizedText,
-      tokens: annotatedTokens,
-      residueTokens: fullTradeNameTokens,
-      attributes: {
-        trade_name_text: isCottonProduct
-          ? normalizedTradeNameTokens.join(' ')
-          : fullTradeNameText,
-        trade_name_tokens: fullTradeNameTokens,
-        dosage_form: null,
-        dosage_form_token: null,
-        dosage_form_source: null,
-        dosage_form_route: null,
-        container_type: null,
-        product_type: productType,
-        vendor_country_text: vendorCountry,
-        vendor_country_tokens: vendorCountryTokens,
-        strengths: isCottonProduct ? strengths : [],
-        volumes: isCottonProduct ? volumes : [],
-        pack_count: state.packCount,
-      },
-    };
-  }
-
-  return {
+  const parsedQuery = {
     rawQuery: rawQuery || '',
     normalizedText,
-    tokens: annotatedTokens,
+    tokens: state.annotatedTokens(),
     residueTokens: tradeNameTokens,
     attributes: {
       trade_name_text: tradeNameText,
@@ -989,6 +949,37 @@ function assembleParsedQuery({
       strengths,
       volumes,
       pack_count: state.packCount,
+    },
+  };
+
+  if (!isBrandOnlyProductType(productType)) return parsedQuery;
+
+  const fullTradeName = stripPackMultipliersFromTradeName(normalizedText || null, state, tokens);
+  const isCottonProduct = normalizedTradeNameTokens.includes('вата');
+  const baseFullTradeNameTokens =
+    (tradeNameTokens.length && productType !== 'device') || !fullTradeName
+      ? normalizedTradeNameTokens
+      : normalizeTradeNameAbbrevTokens(fullTradeName.split(/\s+/u).filter(Boolean));
+  const fullTradeNameTokens =
+    productType === 'other' && state.packCount != null
+      ? dropPackagedOtherProductSizeNumbers(baseFullTradeNameTokens)
+      : baseFullTradeNameTokens;
+  return {
+    ...parsedQuery,
+    residueTokens: fullTradeNameTokens,
+    attributes: {
+      ...parsedQuery.attributes,
+      trade_name_text: isCottonProduct
+        ? normalizedTradeNameTokens.join(' ')
+        : baseFullTradeNameTokens.join(' ').trim() || null,
+      trade_name_tokens: fullTradeNameTokens,
+      dosage_form: null,
+      dosage_form_token: null,
+      dosage_form_source: null,
+      dosage_form_route: null,
+      container_type: null,
+      strengths: isCottonProduct ? strengths : [],
+      volumes: isCottonProduct ? volumes : [],
     },
   };
 }
@@ -1015,10 +1006,8 @@ function parseMedicineQuery(rawQuery) {
     normalizedText,
     tokens,
     state,
-    tradeNameTokens: residue.tradeNameTokens,
     dosageFormRoute,
-    vendorCountry: residue.vendorCountry,
-    vendorCountryTokens: residue.vendorCountryTokens,
+    ...residue,
   });
 }
 

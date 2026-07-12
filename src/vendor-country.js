@@ -173,18 +173,12 @@ const COUNTRY_ALIAS_GROUPS = [
   ['оаэ', 'uae', 'united arab emirates', 'араб амирликлари'],
 ];
 
-const COUNTRY_ALIAS_TO_CANONICAL = new Map();
-
-for (const country of VENDOR_TABLE_COUNTRIES) {
-  COUNTRY_ALIAS_TO_CANONICAL.set(normalizeSqlTerm(country), normalizeSqlTerm(country));
-}
-
-for (const aliases of COUNTRY_ALIAS_GROUPS) {
-  const canonical = aliases[0];
-  for (const alias of aliases) {
-    COUNTRY_ALIAS_TO_CANONICAL.set(normalizeSqlTerm(alias), canonical);
-  }
-}
+const COUNTRY_ALIAS_TO_CANONICAL = new Map([
+  ...VENDOR_TABLE_COUNTRIES.map(normalizeSqlTerm).map((country) => [country, country]),
+  ...COUNTRY_ALIAS_GROUPS.flatMap(([canonical, ...aliases]) =>
+    [canonical, ...aliases].map((alias) => [normalizeSqlTerm(alias), canonical]),
+  ),
+]);
 
 function normalizeVendorCountry(value) {
   const normalized = normalizeSqlTerm(value);
@@ -196,12 +190,12 @@ function getVendorCountrySearchTerms(value) {
   const canonical = normalizeVendorCountry(value);
   if (!canonical) return [];
 
-  return [
+  return [...new Set([
     canonical,
     ...[...COUNTRY_ALIAS_TO_CANONICAL.entries()]
       .filter(([, aliasCanonical]) => aliasCanonical === canonical)
       .map(([alias]) => alias),
-  ].filter((term, index, terms) => term && terms.indexOf(term) === index);
+  ].filter(Boolean))];
 }
 
 function extractVendorCountryFromTokens(tokens) {
@@ -215,28 +209,13 @@ function extractVendorCountryFromTokens(tokens) {
   }
 
   for (let size = Math.min(3, values.length); size >= 1; size -= 1) {
-    const suffixTokens = values.slice(-size);
-    const suffixText = suffixTokens.join(' ');
-    const suffixCanonical = normalizeVendorCountry(suffixText);
-    if (suffixCanonical) {
-      return {
-        canonical: suffixCanonical,
-        text: suffixText,
-        matchedTokens: suffixTokens,
-        remainingTokens: values.slice(0, -size),
-      };
-    }
-
-    const prefixTokens = values.slice(0, size);
-    const prefixText = prefixTokens.join(' ');
-    const prefixCanonical = normalizeVendorCountry(prefixText);
-    if (prefixCanonical) {
-      return {
-        canonical: prefixCanonical,
-        text: prefixText,
-        matchedTokens: prefixTokens,
-        remainingTokens: values.slice(size),
-      };
+    for (const [matchedTokens, remainingTokens] of [
+      [values.slice(-size), values.slice(0, -size)],
+      [values.slice(0, size), values.slice(size)],
+    ]) {
+      const text = matchedTokens.join(' ');
+      const canonical = normalizeVendorCountry(text);
+      if (canonical) return { canonical, text, matchedTokens, remainingTokens };
     }
   }
 
@@ -245,8 +224,7 @@ function extractVendorCountryFromTokens(tokens) {
 
 function vendorCountryMatches(parsedCountry, candidateCountry) {
   const normalizedParsed = normalizeVendorCountry(parsedCountry);
-  const normalizedCandidate = normalizeVendorCountry(candidateCountry);
-  return Boolean(normalizedParsed && normalizedCandidate && normalizedParsed === normalizedCandidate);
+  return Boolean(normalizedParsed && normalizedParsed === normalizeVendorCountry(candidateCountry));
 }
 
 module.exports = {

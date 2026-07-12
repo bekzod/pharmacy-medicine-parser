@@ -43,12 +43,11 @@ function normalizeSqlTerm(value) {
 const HOMOGLYPH_WORD_RE = /[\p{L}\p{N}]+(?:[.'\u2019-][\p{L}\p{N}]+)*/gu;
 
 function normalizeLatinHomoglyphs(text) {
-  return String(text || '').replace(HOMOGLYPH_WORD_RE, (word) => {
-    if (/[\u0400-\u04ff]/u.test(word) && /[a-zA-Z]/u.test(word)) {
-      return word.replace(LATIN_HOMOGLYPH_RE, (char) => LATIN_TO_CYRILLIC[char] || char);
-    }
-    return word;
-  });
+  return String(text || '').replace(HOMOGLYPH_WORD_RE, (word) =>
+    /[\u0400-\u04ff]/u.test(word) && /[a-zA-Z]/u.test(word)
+      ? word.replace(LATIN_HOMOGLYPH_RE, (char) => LATIN_TO_CYRILLIC[char] || char)
+      : word,
+  );
 }
 
 function buildLikeAnyPredicates(expressions, keys) {

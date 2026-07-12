@@ -38,10 +38,8 @@ const MEDICINE_TOKEN_NORMALIZERS = [
   [/^(?:cp|cр|сp|ср|sr|sр)$/u, 'ср'],
   [/^(?:mr|mр|мr|мр)$/u, 'мр'],
   [/^(?:dsr|dсr|dsр|дsr|dср|дсr|дsр|дср)$/u, 'дср'],
-  [/^взр\.?$/u, 'взр'],
-  [/^взросл(?:ый|ая|ое|ые|ого|ому|ым|ых|ой|ую|ыми|ом)?$/u, 'взр'],
-  [/^дет\.?$/u, 'дет'],
-  [/^дет(?:и|ей|ям|ьми|ях|ский|ская|ское|ские|ского|ской|скому|ских)?$/u, 'дет'],
+  [/^(?:взр\.?|взросл(?:ый|ая|ое|ые|ого|ому|ым|ых|ой|ую|ыми|ом)?)$/u, 'взр'],
+  [/^(?:дет\.?|дет(?:и|ей|ям|ьми|ях|ский|ская|ское|ские|ского|ской|скому|ских))$/u, 'дет'],
   [/^мят[а-я]*$/u, 'мята'],
   [/^лимон[а-я]*$/u, 'лимон'],
   [/^малин[а-я]*$/u, 'малина'],
@@ -56,8 +54,7 @@ const MEDICINE_TOKEN_NORMALIZERS = [
   [/^имбир[а-я]*$/u, 'имбирь'],
   [/^гранат[а-я]*$/u, 'гранат'],
   [/^плющ[а-я]*$/u, 'плющ'],
-  [/^беби$/u, 'бейби'],
-  [/^бейби$/u, 'бейби'],
+  [/^(?:беби|бейби)$/u, 'бейби'],
   [/^ромашк[а-я]*$/u, 'ромашка'],
   [/^чабрец[а-я]*$/u, 'чабрец'],
   [/^кокос[а-я]*$/u, 'кокос'],
@@ -86,7 +83,6 @@ const MEDICINE_NOISE_TOKENS = new Set([
   'по',
   'вкусом',
   'приема',
-  'приёма',
   'внутрь',
   'перорального',
   'оральный',
@@ -241,10 +237,15 @@ const MEDICINE_FORM_TOKENS = new Set(MEDICINE_FORM_NORMALIZERS.map(([, normalize
 const MEDICINE_DESCRIPTOR_TOKENS = new Set(
   MEDICINE_DESCRIPTOR_NORMALIZERS.map(([, normalized]) => normalized),
 );
+const MEDICINE_NORMALIZERS = [
+  ...MEDICINE_UNIT_NORMALIZERS,
+  ...MEDICINE_FORM_NORMALIZERS,
+  ...MEDICINE_DESCRIPTOR_NORMALIZERS,
+  ...MEDICINE_TOKEN_NORMALIZERS,
+];
 
 function normalizePackValue(value) {
-  if (!value) return null;
-  return value === '1' ? null : value;
+  return !value || value === '1' ? null : value;
 }
 
 function normalizeMedicineSearchText(name) {
@@ -273,10 +274,7 @@ function normalizeMedicineIngredientAdjective(token) {
 }
 
 function normalizeMedicineToken(token) {
-  const cleaned = String(token || '')
-    .toLowerCase()
-    .replace(/ё/g, 'е')
-    .trim();
+  const cleaned = normalizeSqlTerm(token);
   if (!cleaned) return '';
 
   if (/^\d+[.,]\d+$/u.test(cleaned)) {
@@ -287,19 +285,7 @@ function normalizeMedicineToken(token) {
     return cleaned;
   }
 
-  for (const [pattern, normalized] of MEDICINE_UNIT_NORMALIZERS) {
-    if (pattern.test(cleaned)) return normalized;
-  }
-
-  for (const [pattern, normalized] of MEDICINE_FORM_NORMALIZERS) {
-    if (pattern.test(cleaned)) return normalized;
-  }
-
-  for (const [pattern, normalized] of MEDICINE_DESCRIPTOR_NORMALIZERS) {
-    if (pattern.test(cleaned)) return normalized;
-  }
-
-  for (const [pattern, normalized] of MEDICINE_TOKEN_NORMALIZERS) {
+  for (const [pattern, normalized] of MEDICINE_NORMALIZERS) {
     if (pattern.test(cleaned)) return normalized;
   }
 
@@ -379,7 +365,6 @@ function extractMedicineProfile(name) {
   const strengthTokens = new Set();
   const pairedStrengthNumbers = new Set();
   const standaloneStrengthNumberGroups = [];
-  const ignoredStrengthNumberIndexes = new Set();
   let pendingStandaloneStrengthNumbers = [];
   let form = null;
   let formPriority = -1;
@@ -482,7 +467,6 @@ function extractMedicineProfile(name) {
       if (previous === 'д' && previousBrandToken === 'д') {
         brandTokens.pop();
         brandTokens.push(`д${token}`);
-        ignoredStrengthNumberIndexes.add(i);
         continue;
       }
 
@@ -492,7 +476,6 @@ function extractMedicineProfile(name) {
         !brandTokens.includes(prefixedNumericToken)
       ) {
         brandTokens.push(prefixedNumericToken);
-        ignoredStrengthNumberIndexes.add(i);
         continue;
       }
 
@@ -503,7 +486,6 @@ function extractMedicineProfile(name) {
       ) {
         brandTokens.pop();
         brandTokens.push(`${previous}${token}`);
-        ignoredStrengthNumberIndexes.add(i);
         continue;
       }
 
@@ -514,12 +496,10 @@ function extractMedicineProfile(name) {
         nextEndsBrandPhrase
       ) {
         brandTokens.push(token);
-        ignoredStrengthNumberIndexes.add(i);
         continue;
       }
 
       if (joinedWithPrevious) {
-        ignoredStrengthNumberIndexes.add(i);
         continue;
       }
 
