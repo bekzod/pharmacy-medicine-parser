@@ -12,11 +12,10 @@ const {
   buildSimpleStrengthNode,
   collectNumericSequence,
 } = require('./measurements');
+const { normalizeSqlTerm } = require('../medicine-lookup-common');
 
 function detectDosageFormRoute(rawQuery) {
-  const text = String(rawQuery || '')
-    .toLowerCase()
-    .replace(/ё/g, 'е');
+  const text = normalizeSqlTerm(rawQuery);
   if (!text) return null;
   for (const { route, pattern } of DOSAGE_FORM_ROUTE_PATTERNS) {
     if (pattern.test(text)) return route;
@@ -455,9 +454,7 @@ function fixExplicitOralSolidGramShorthand({ state, tradeNameTokens }) {
 }
 
 function hasRehydrationSaltTrade(tradeNameTokens) {
-  const tokens = (tradeNameTokens || []).map((token) =>
-    String(token || '').toLowerCase().replace(/ё/g, 'е'),
-  );
+  const tokens = (tradeNameTokens || []).map(normalizeSqlTerm);
   return (
     tokens.includes('регидрационная') &&
     tokens.some((token) => token === 'соль' || /^соль-l[рp]$/u.test(token))
@@ -574,13 +571,9 @@ function maybeInferTrailingOralSolidPackCount({ state, tradeNameTokens }) {
   });
   if (packIndex == null) return null;
 
-  let hasStrengthBefore = false;
-  for (let index = 0; index < packIndex; index += 1) {
-    if (state.tokenRoles.get(index) === 'strength') {
-      hasStrengthBefore = true;
-      break;
-    }
-  }
+  const hasStrengthBefore = [...state.tokenRoles].some(
+    ([index, role]) => index < packIndex && role === 'strength',
+  );
   if (!hasStrengthBefore) return null;
 
   state.consume(packIndex, 'pack');
@@ -844,15 +837,10 @@ function hasPrefilledSyringeSignal(rawQuery, normalizedText) {
 
 const SOLVENT_LOOKBACK_TOKENS = 8;
 
-function lowerToken(token) {
-  return String(token?.value || '').toLowerCase().replace(/ё/g, 'е');
-}
-
 function hasTokenWithPrefixInRange(tokens, prefixRe, fromIndex, toIndex) {
-  for (let index = fromIndex; index < toIndex; index += 1) {
-    if (prefixRe.test(lowerToken(tokens[index]))) return true;
-  }
-  return false;
+  return tokens
+    .slice(fromIndex, toIndex)
+    .some((token) => prefixRe.test(normalizeSqlTerm(token?.value)));
 }
 
 function isSolventVolumeCandidate(volume, tokens) {
@@ -868,7 +856,7 @@ function isSolventVolumeCandidate(volume, tokens) {
 
 function findSolventClauseStartIndex(tokens) {
   for (let index = 0; index < tokens.length; index += 1) {
-    if (!/^растворител/u.test(lowerToken(tokens[index]))) continue;
+    if (!/^растворител/u.test(normalizeSqlTerm(tokens[index]?.value))) continue;
     if (
       hasTokenWithPrefixInRange(
         tokens,

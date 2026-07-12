@@ -98,17 +98,13 @@ class ParseState {
     const currentSourcePriority =
       this.dosageFormSource === 'explicit'
         ? 2
-        : this.dosageFormSource === 'inferred_from_container'
-          ? 1
-          : 0;
+        : Number(this.dosageFormSource === 'inferred_from_container');
     const keepCurrentDosageForm =
       this.dosageFormSource === 'explicit' &&
       token.dosageFormSource === 'explicit' &&
       EXPLICIT_DOSAGE_FORM_KEEP_PAIRS.has(`${this.dosageForm}|${token.dosageForm}`);
-    const overrideForFinalForm =
-      this.dosageForm === 'powder' && token.dosageForm === 'suspension';
     const shouldReplace =
-      overrideForFinalForm ||
+      (this.dosageForm === 'powder' && token.dosageForm === 'suspension') ||
       !this.dosageFormToken ||
       sourcePriority > currentSourcePriority ||
       (sourcePriority === currentSourcePriority &&

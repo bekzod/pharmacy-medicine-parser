@@ -16,6 +16,23 @@ const {
   parseContainerType,
 } = require('./normalization');
 
+const SYMBOL_TOKEN_TYPES = new Map([
+  ['%', 'PERCENT'],
+  ['/', 'SLASH'],
+  ['+', 'PLUS'],
+]);
+
+function buildNumberToken(value, start, end) {
+  return {
+    type: 'NUMBER',
+    value,
+    normalizedValue: value,
+    numericValue: Number.parseFloat(value),
+    start,
+    end,
+  };
+}
+
 function classifyWordToken(token) {
   if (token === 'n') {
     return { type: 'COUNT_MARKER', normalizedValue: token };
@@ -219,14 +236,7 @@ function tokenizeNormalizedQuery(normalizedText) {
       if (MEDICINE_UNIT_TOKENS.has(unit)) {
         const numberValue = compactMeasurement[1];
         return [
-          {
-            type: 'NUMBER',
-            value: numberValue,
-            normalizedValue: numberValue,
-            numericValue: Number.parseFloat(numberValue),
-            start,
-            end: start + numberValue.length,
-          },
+          buildNumberToken(numberValue, start, start + numberValue.length),
           {
             type: 'UNIT',
             value: compactMeasurement[2],
@@ -239,27 +249,11 @@ function tokenizeNormalizedQuery(normalizedText) {
       }
     }
 
-    if (value === '%') {
-      return { type: 'PERCENT', value, normalizedValue: value, start, end };
-    }
-
-    if (value === '/') {
-      return { type: 'SLASH', value, normalizedValue: value, start, end };
-    }
-
-    if (value === '+') {
-      return { type: 'PLUS', value, normalizedValue: value, start, end };
-    }
+    const symbolType = SYMBOL_TOKEN_TYPES.get(value);
+    if (symbolType) return { type: symbolType, value, normalizedValue: value, start, end };
 
     if (/^\d+(?:\.\d+)?$/u.test(value)) {
-      return {
-        type: 'NUMBER',
-        value,
-        normalizedValue: value,
-        numericValue: Number.parseFloat(value),
-        start,
-        end,
-      };
+      return buildNumberToken(value, start, end);
     }
 
     return {

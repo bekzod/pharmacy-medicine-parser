@@ -319,20 +319,21 @@ const MEDICINE_DOSAGE_FORMS = [
   },
 ];
 
-const MEDICINE_FORM_NORMALIZERS = MEDICINE_DOSAGE_FORMS.flatMap(({ profile }) => {
-  if (!profile) return [];
-  return profile.tokenPatterns.map((pattern) => [pattern, profile.token]);
-});
+const PROFILED_DOSAGE_FORMS = MEDICINE_DOSAGE_FORMS.filter(({ profile }) => profile);
+
+const MEDICINE_FORM_NORMALIZERS = PROFILED_DOSAGE_FORMS.flatMap(({ profile }) =>
+  profile.tokenPatterns.map((pattern) => [pattern, profile.token]),
+);
 
 const MEDICINE_FORM_PRIORITIES = new Map(
-  MEDICINE_DOSAGE_FORMS.filter(({ profile }) => profile?.token).map(({ profile }) => [
+  PROFILED_DOSAGE_FORMS.map(({ profile }) => [
     profile.token,
     profile.priority || 0,
   ]),
 );
 
 const MEDICINE_FORM_TO_DOSAGE_FORMS = new Map(
-  MEDICINE_DOSAGE_FORMS.filter(({ profile }) => profile?.token).map(({ form, profile }) => [
+  PROFILED_DOSAGE_FORMS.map(({ form, profile }) => [
     profile.token,
     [form],
   ]),
@@ -340,12 +341,9 @@ const MEDICINE_FORM_TO_DOSAGE_FORMS = new Map(
 
 function parseDosageForm(name) {
   if (!name) return null;
-  for (const { form, parsePatterns } of MEDICINE_DOSAGE_FORMS) {
-    for (const pattern of parsePatterns) {
-      if (pattern.test(name)) return form;
-    }
-  }
-  return null;
+  return MEDICINE_DOSAGE_FORMS.find(({ parsePatterns }) =>
+    parsePatterns.some((pattern) => pattern.test(name)),
+  )?.form || null;
 }
 
 module.exports = {

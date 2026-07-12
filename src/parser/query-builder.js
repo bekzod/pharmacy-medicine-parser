@@ -28,6 +28,11 @@ const PACK_ONE_NULL_COMPATIBLE_DOSAGE_FORMS = new Set([
 ]);
 const PERCENT_MASS_PACKAGE_UNITS = new Set(['г', 'кг']);
 const PERCENT_VOLUME_PACKAGE_UNITS = new Set(['мл', 'л']);
+const DOSE_UNIT_ALIASES = new Map([
+  ['ед', ['ме']],
+  ['ме', ['ед']],
+  ['iu', ['ме', 'ед']],
+]);
 const TRADE_NAME_SCORE_PARTS = {
   structured: ['trade_name_score * 0.72'],
   trade_only: ['trade_name_score * 0.66'],
@@ -65,6 +70,13 @@ function appendReplacementsWithVariants(
   variantBuilder = buildDecimalVariants,
 ) {
   return appendReplacementsWithVariantsGrouped(replacements, prefix, values, variantBuilder).flat();
+}
+
+function buildExactPrefixPredicates(expression) {
+  return [
+    `${expression} = :tradeNameQuery`,
+    `${expression} LIKE :tradeNamePrefix || '%' ESCAPE '\\'`,
+  ];
 }
 
 function buildExactAnyCondition(expressions, keys) {
@@ -290,19 +302,11 @@ function buildStrengthSearchTextsWithPolicy(strengths, volumes = [], { strict = 
   return [...values];
 }
 
-function doseUnitAliases(unit) {
-  const normalized = String(unit || '').toLowerCase();
-  if (normalized === 'ед') return ['ме'];
-  if (normalized === 'ме') return ['ед'];
-  if (normalized === 'iu') return ['ме', 'ед'];
-  return [];
-}
-
 function addDoseUnitAliasStrengthTexts(values, strength) {
   if (!strength || strength.value == null || !strength.unit) return;
   const numericValue = Number(strength.value);
   if (!Number.isFinite(numericValue)) return;
-  const aliases = doseUnitAliases(strength.unit);
+  const aliases = DOSE_UNIT_ALIASES.get(String(strength.unit).toLowerCase()) || [];
   if (!aliases.length) return;
   const formattedValue = formatMeasurementNumber(numericValue);
   if (!formattedValue) return;
@@ -592,21 +596,12 @@ function buildCandidatePredicates(context) {
     replacements,
     tradeNameTokenSearchTexts,
   } = context;
-  const tradeNameCandidatePredicates = [
-    `${normalizedTradeNameExpr} = :tradeNameQuery`,
-    `${normalizedTradeNameExpr} LIKE :tradeNamePrefix || '%' ESCAPE '\\'`,
-  ];
+  const tradeNameCandidatePredicates = buildExactPrefixPredicates(normalizedTradeNameExpr);
   if (!brandOnlySearch) {
-    tradeNameCandidatePredicates.push(
-      `${normalizedNameExpr} = :tradeNameQuery`,
-      `${normalizedNameExpr} LIKE :tradeNamePrefix || '%' ESCAPE '\\'`,
-    );
+    tradeNameCandidatePredicates.push(...buildExactPrefixPredicates(normalizedNameExpr));
   }
   const nameCandidatePredicates = brandOnlySearch
-    ? [
-        `${normalizedNameExpr} = :tradeNameQuery`,
-        `${normalizedNameExpr} LIKE :tradeNamePrefix || '%' ESCAPE '\\'`,
-      ]
+    ? buildExactPrefixPredicates(normalizedNameExpr)
     : [];
   if (includeTrigram) {
     tradeNameCandidatePredicates.push(`${normalizedTradeNameExpr} % :tradeNameQuery`);
@@ -614,13 +609,14 @@ function buildCandidatePredicates(context) {
       nameCandidatePredicates.push(`${normalizedNameExpr} % :tradeNameQuery`);
     }
   }
-  let tradeNameTokenKeys = [];
+  const tradeNameTokenKeys = tradeNameTokenSearchTexts.length
+    ? appendReplacementsWithVariants(
+        replacements,
+        'tradeNameToken',
+        tradeNameTokenSearchTexts,
+      )
+    : [];
   if (tradeNameTokenSearchTexts.length) {
-    tradeNameTokenKeys = appendReplacementsWithVariants(
-      replacements,
-      'tradeNameToken',
-      tradeNameTokenSearchTexts,
-    );
     tradeNameCandidatePredicates.push(
       ...buildLikeAnyPredicates(
         brandOnlySearch ? [normalizedTradeNameExpr, normalizedNameExpr] : [normalizedTradeNameExpr],
@@ -796,12 +792,11 @@ function buildCandidateConditions(context) {
     attributes.pack_count === 1 &&
     (PACK_ONE_NULL_COMPATIBLE_DOSAGE_FORMS.has(attributes.dosage_form) ||
       (!attributes.dosage_form && (hasParsedVolume || hasParsedStandaloneMass)));
-  if (hasParsedPackCount && requireParsedAttributeMatch) {
+  if (hasParsedPackCount) {
+    const requireExactPack = requireParsedAttributeMatch && !relaxPackOneNullMatch;
     candidateBaseConditions.push(
-      relaxPackOneNullMatch ? '(m.pack = :packCount OR m.pack IS NULL)' : 'm.pack = :packCount',
+      requireExactPack ? 'm.pack = :packCount' : '(m.pack = :packCount OR m.pack IS NULL)',
     );
-  } else if (hasParsedPackCount) {
-    candidateBaseConditions.push('(m.pack = :packCount OR m.pack IS NULL)');
   }
   if (requireParsedAttributeMatch && strengthSearchTexts.length) {
     const strengthFilterKeys = appendReplacementsWithVariants(
@@ -914,9 +909,8 @@ function buildMedicineSearchQuery(parsedQuery, options = {}) {
   Object.assign(context, buildCandidatePredicates(context));
   Object.assign(context, buildScoreExpression(context));
   context.candidateBaseConditions = buildCandidateConditions(context);
-  const sql = renderMedicineSearchSql(context);
   return {
-    sql,
+    sql: renderMedicineSearchSql(context),
     replacements: context.replacements,
   };
 }

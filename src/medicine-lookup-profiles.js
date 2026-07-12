@@ -5,6 +5,7 @@ const {
   normalizeQuery,
   transliterateLatinToCyrillic,
 } = require('./medicine-fuzzy-search');
+const { normalizeSqlTerm } = require('./medicine-lookup-common');
 
 const VOLUME_LIKE_UNITS = new Set(['мл', 'л', 'г']);
 const CONTAINER_TOKEN_RE =
@@ -42,6 +43,12 @@ function normalizeTextList(values) {
   }
 
   return items;
+}
+
+function normalizeMeasurementTexts(measurements) {
+  return normalizeTextList((measurements || []).map((measurement) => measurement?.text)).map(
+    normalizeQuery,
+  );
 }
 
 function joinStoredValues(values) {
@@ -296,16 +303,13 @@ function collectStructuredDetails(name) {
     if (fallbackStrength) normalizedStrengths.push(fallbackStrength);
     if (fallbackVolume) normalizedVolumes.push(fallbackVolume);
   }
-  const storedStrength = joinStoredValues(normalizedStrengths);
-  const storedVolume = joinStoredValues(normalizedVolumes);
-
   return {
     trade_name: normalizeStoredLookupValue(tradeName),
     container_type: containerType,
     dosage_form: dosageForm,
     product_type: productType,
-    strength: normalizeStoredLookupValue(storedStrength),
-    volume: normalizeStoredLookupValue(storedVolume),
+    strength: normalizeStoredLookupValue(joinStoredValues(normalizedStrengths)),
+    volume: normalizeStoredLookupValue(joinStoredValues(normalizedVolumes)),
     pack,
     strengthTexts: normalizedStrengths,
     volumeTexts: normalizedVolumes,
@@ -313,37 +317,28 @@ function collectStructuredDetails(name) {
 }
 
 function extractMedicineDetails(name) {
-  const { trade_name, container_type, dosage_form, product_type, strength, volume, pack } =
-    collectStructuredDetails(name);
+  const { strengthTexts, volumeTexts, ...details } = collectStructuredDetails(name);
+  return details;
+}
 
+function withoutMedicineAttributes(parsed, overrides = {}) {
   return {
-    trade_name,
-    container_type,
-    dosage_form,
-    product_type,
-    strength,
-    volume,
-    pack,
+    ...parsed.attributes,
+    dosage_form: null,
+    dosage_form_token: null,
+    dosage_form_source: null,
+    container_type: null,
+    product_type: null,
+    strengths: [],
+    volumes: [],
+    pack_count: null,
+    ...overrides,
   };
 }
 
 function buildTradeOnlyParsed(parsed) {
   if (!parsed) return null;
-
-  return {
-    ...parsed,
-    attributes: {
-      ...parsed.attributes,
-      dosage_form: null,
-      dosage_form_token: null,
-      dosage_form_source: null,
-      container_type: null,
-      product_type: null,
-      strengths: [],
-      volumes: [],
-      pack_count: null,
-    },
-  };
+  return { ...parsed, attributes: withoutMedicineAttributes(parsed) };
 }
 
 function buildBrandOnlyParsed(parsed, rawName) {
@@ -353,26 +348,18 @@ function buildBrandOnlyParsed(parsed, rawName) {
   const fullText =
     rawText === rawName
       ? normalizeQuery(rawText)
-      : String(rawText).trim().toLowerCase().replace(/ё/gu, 'е');
+      : normalizeSqlTerm(rawText);
   if (!fullText) return null;
 
   return {
     ...parsed,
     normalizedText: fullText,
-    attributes: {
-      ...parsed.attributes,
+    attributes: withoutMedicineAttributes(parsed, {
       trade_name_text: fullText,
-      dosage_form: null,
-      dosage_form_token: null,
-      dosage_form_source: null,
-      container_type: null,
       product_type: isBrandOnlyProductType(parsed?.attributes?.product_type)
         ? parsed.attributes.product_type
         : null,
-      strengths: [],
-      volumes: [],
-      pack_count: null,
-    },
+    }),
   };
 }
 
@@ -406,23 +393,17 @@ function buildStructuredTradeNameVariantParses(parsed) {
   const transliterated = normalizeQuery(transliterateLatinToCyrillic(tradeNameText));
   if (!transliterated || transliterated === tradeNameText) return [];
 
-  return [buildTradeNameVariantParsed(parsed, transliterated)].filter(Boolean);
+  return [buildTradeNameVariantParsed(parsed, transliterated)];
 }
 
 function buildProfileSignature(kind, parsed) {
   const attributes = parsed?.attributes || {};
   const tradeNameText = normalizeQuery(attributes.trade_name_text || '');
   const dosageForm = normalizeQuery(attributes.dosage_form || '');
-  const strengthTexts = normalizeTextList(
-    (attributes.strengths || []).map((strength) => strength?.text),
-  ).map((text) => normalizeQuery(text));
-  const volumeTexts = normalizeTextList(
-    (attributes.volumes || []).map((volume) => volume?.text),
-  ).map((text) => normalizeQuery(text));
+  const strengthTexts = normalizeMeasurementTexts(attributes.strengths);
+  const volumeTexts = normalizeMeasurementTexts(attributes.volumes);
   const pack = Number.isInteger(attributes.pack_count) ? attributes.pack_count : '';
-  const productType = String(attributes.product_type || '')
-    .trim()
-    .toLowerCase();
+  const productType = normalizeStoredLookupValue(attributes.product_type) || '';
 
   return JSON.stringify([
     kind,
@@ -435,30 +416,18 @@ function buildProfileSignature(kind, parsed) {
   ]);
 }
 
-function buildLookupProfile(kind, parsed, rawName) {
-  if (!parsed?.attributes?.trade_name_text) return null;
-
-  return {
-    kind,
-    searchMode: kind,
-    rawName,
-    parsed,
-  };
-}
-
 function buildQueryLookupProfiles(rawName, overrides = {}, parseQuery = parseMedicineQuery) {
   const parsed = applyAttributeOverrides(parseQuery(rawName), overrides);
   const profiles = [];
   const seen = new Set();
 
   function add(kind, profileParsed) {
-    const profile = buildLookupProfile(kind, profileParsed, rawName);
-    if (!profile) return;
+    if (!profileParsed?.attributes?.trade_name_text) return;
 
     const signature = buildProfileSignature(kind, profileParsed);
     if (seen.has(signature)) return;
     seen.add(signature);
-    profiles.push(profile);
+    profiles.push({ kind, searchMode: kind, rawName, parsed: profileParsed });
   }
 
   if (
@@ -490,12 +459,8 @@ function buildAliasTextsFromProfile(profile) {
     const parts = [
       tradeNameText,
       normalizeQuery(attributes.dosage_form || ''),
-      ...normalizeTextList((attributes.strengths || []).map((strength) => strength?.text)).map(
-        (text) => normalizeQuery(text),
-      ),
-      ...normalizeTextList((attributes.volumes || []).map((volume) => volume?.text)).map((text) =>
-        normalizeQuery(text),
-      ),
+      ...normalizeMeasurementTexts(attributes.strengths),
+      ...normalizeMeasurementTexts(attributes.volumes),
     ].filter(Boolean);
 
     if (parts.length) {

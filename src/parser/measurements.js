@@ -1,6 +1,8 @@
 const { UNIT_FAMILY_BY_VALUE } = require('./constants');
 
 const TRAILING_UNIT_COMBINATION_FORMS = new Set(['tablet', 'capsule', 'pastille', 'granule']);
+const METERED_DOSAGE_FORMS = new Set(['aerosol', 'inhaler', 'spray']);
+const MASS_NUMERATOR_UNITS = new Set(['мг', 'мкг']);
 
 function buildMeasurementNode(numberToken, unitToken, startIndex, endIndex) {
   return {
@@ -34,14 +36,11 @@ function buildSimpleStrengthNode(values, unit, startIndex, endIndex) {
   // DB stores multi-value combination strengths with the unit duplicated on
   // both sides of the slash (e.g. "5 мг/10 мг"). Match that format so strict
   // strength:= filters in Typesense hit. Single-value and percent stay compact.
-  let text;
-  if (unit === '%') {
-    text = `${values.join('/')}%`;
-  } else if (values.length > 1) {
-    text = values.map((value) => `${value} ${unit}`).join('/');
-  } else {
-    text = `${values[0]} ${unit}`;
-  }
+  const text = unit === '%'
+    ? `${values.join('/')}%`
+    : values.length > 1
+      ? values.map((value) => `${value} ${unit}`).join('/')
+      : `${values[0]} ${unit}`;
   return {
     kind: 'simple',
     text,
@@ -549,32 +548,27 @@ function inferCompactPlusSharedDenominatorRatios(strengths, normalizedText, dosa
   );
   if (!compact) return strengths;
 
-  if (dosageForm === 'drops') {
-    return (strengths || []).map((strength) =>
-      strength === compact
-        ? buildRatioStrengthNode(
-            values,
-            unit,
-            { value: null, unit: denominatorUnit },
-            compact.startIndex,
-            compact.endIndex,
-          )
-        : strength,
-    );
-  }
-
+  const replacementStrengths = dosageForm === 'drops'
+    ? [
+        buildRatioStrengthNode(
+          values,
+          unit,
+          { value: null, unit: denominatorUnit },
+          compact.startIndex,
+          compact.endIndex,
+        ),
+      ]
+    : values.map((value) =>
+        buildRatioStrengthNode(
+          [value],
+          unit,
+          { value: null, unit: denominatorUnit },
+          compact.startIndex,
+          compact.endIndex,
+        ),
+      );
   return (strengths || []).flatMap((strength) =>
-    strength === compact
-      ? values.map((value) =>
-          buildRatioStrengthNode(
-            [value],
-            unit,
-            { value: null, unit: denominatorUnit },
-            compact.startIndex,
-            compact.endIndex,
-          ),
-        )
-      : [strength],
+    strength === compact ? replacementStrengths : [strength],
   );
 }
 
@@ -585,47 +579,40 @@ function inferCompactPlusSharedDenominatorRatios(strengths, normalizedText, dosa
 // as "100 мкг/доз" and volume as "200 доз". Without simplification, the
 // strict Typesense filter `strength:="100 мкг/200 доз"` excludes those rows.
 function simplifyInhalationDoseRatios(strengths, volumes, dosageForm) {
-  if (dosageForm !== 'aerosol' && dosageForm !== 'inhaler' && dosageForm !== 'spray') {
+  if (!METERED_DOSAGE_FORMS.has(dosageForm)) {
     return { strengths, volumes };
   }
 
-  const newStrengths = [];
   const newVolumes = [...(volumes || [])];
-
-  const MASS_NUMERATOR_UNITS = new Set(['мг', 'мкг']);
-
-  for (const strength of strengths || []) {
+  const newStrengths = (strengths || []).map((strength) => {
     if (
-      strength?.kind === 'ratio' &&
-      MASS_NUMERATOR_UNITS.has(String(strength.unit || '').toLowerCase()) &&
-      strength.denominator?.unit === 'доз' &&
-      Number.isFinite(strength.denominator.value) &&
-      strength.denominator.value > 1
+      strength?.kind !== 'ratio' ||
+      !MASS_NUMERATOR_UNITS.has(String(strength.unit || '').toLowerCase()) ||
+      strength.denominator?.unit !== 'доз' ||
+      !Number.isFinite(strength.denominator.value) ||
+      strength.denominator.value <= 1
     ) {
-      const doseCount = strength.denominator.value;
-      const alreadyHasDoseVolume = newVolumes.some(
-        (volume) => volume?.unit === 'доз' && volume?.value === doseCount,
-      );
-      if (!alreadyHasDoseVolume) {
-        newVolumes.push({
-          text: `${formatNormalizedNumber(doseCount)} доз`,
-          value: doseCount,
-          unit: 'доз',
-        });
-      }
-
-      const numeratorText = Array.isArray(strength.values)
-        ? strength.values.map(formatNormalizedNumber).join('/')
-        : formatNormalizedNumber(strength.value);
-      newStrengths.push({
-        ...strength,
-        text: `${numeratorText} ${strength.unit}/доз`,
-        denominator: { value: null, unit: 'доз' },
-      });
-    } else {
-      newStrengths.push(strength);
+      return strength;
     }
-  }
+
+    const doseCount = strength.denominator.value;
+    if (!newVolumes.some((volume) => volume?.unit === 'доз' && volume?.value === doseCount)) {
+      newVolumes.push({
+        text: `${formatNormalizedNumber(doseCount)} доз`,
+        value: doseCount,
+        unit: 'доз',
+      });
+    }
+
+    const numeratorText = Array.isArray(strength.values)
+      ? strength.values.map(formatNormalizedNumber).join('/')
+      : formatNormalizedNumber(strength.value);
+    return {
+      ...strength,
+      text: `${numeratorText} ${strength.unit}/доз`,
+      denominator: { value: null, unit: 'доз' },
+    };
+  });
 
   return { strengths: newStrengths, volumes: newVolumes };
 }
@@ -903,7 +890,7 @@ function buildPerDoseRatioStrength(strength, value = strength.value) {
 }
 
 function inferMeteredDoseStrengths(strengths, volumes, dosageForm) {
-  if (!['aerosol', 'inhaler', 'spray'].includes(dosageForm)) {
+  if (!METERED_DOSAGE_FORMS.has(dosageForm)) {
     return { strengths, volumes };
   }
 
