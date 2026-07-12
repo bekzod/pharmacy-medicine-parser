@@ -5,7 +5,7 @@ const {
   MEDICINE_FORM_TO_DOSAGE_FORMS,
   parseDosageForm,
 } = require('./medicine-dosage-forms');
-const { normalizeLatinHomoglyphs } = require('./medicine-lookup-common');
+const { normalizeLatinHomoglyphs, normalizeSqlTerm } = require('./medicine-lookup-common');
 
 const MEDICINE_DECIMAL_MARKER = '~';
 
@@ -351,41 +351,27 @@ function extractMedicineDosageForms(rawName, profileForm = null) {
   return [...dosageForms];
 }
 
-function hasJoinedMedicineTokenSequence(rawName, left, right) {
-  const normalizedName = String(rawName || '')
-    .toLowerCase()
-    .replace(/ё/g, 'е');
-  const normalizedLeft = String(left || '')
-    .toLowerCase()
-    .replace(/ё/g, 'е');
-  const normalizedRight = String(right || '')
-    .toLowerCase()
-    .replace(/ё/g, 'е');
-  if (!normalizedLeft || !normalizedRight) return false;
+function hasJoinedMedicineTokenSequence(normalizedName, left, right) {
+  if (!left || !right) return false;
 
   return (
-    normalizedName.includes(`${normalizedLeft}${normalizedRight}`) ||
-    normalizedName.includes(`${normalizedLeft}-${normalizedRight}`)
+    normalizedName.includes(`${left}${right}`) ||
+    normalizedName.includes(`${left}-${right}`)
   );
 }
 
-function extractPrefixedMedicineNumericToken(rawName, value) {
-  const normalizedName = String(rawName || '')
-    .toLowerCase()
-    .replace(/ё/g, 'е');
-  const normalizedValue = String(value || '')
-    .toLowerCase()
-    .replace(/ё/g, 'е');
-  if (!normalizedValue) return '';
+function extractPrefixedMedicineNumericToken(normalizedName, value) {
+  if (!value) return '';
 
   const match = normalizedName.match(
-    new RegExp(`(^|[^\\p{L}\\p{N}])([a-zа-я])${normalizedValue}(?=$|[^\\p{L}\\p{N}])`, 'u'),
+    new RegExp(`(^|[^\\p{L}\\p{N}])([a-zа-я])${value}(?=$|[^\\p{L}\\p{N}])`, 'u'),
   );
-  return match ? `${match[2]}${normalizedValue}` : '';
+  return match ? `${match[2]}${value}` : '';
 }
 
 function extractMedicineProfile(name) {
   const tokens = tokenizeMedicineName(name);
+  const normalizedName = normalizeSqlTerm(name);
   const canonicalTokens = [
     ...new Set(tokens.filter((token) => !/^n\d+$/u.test(token) && !/^\d+x\d+$/u.test(token))),
   ].sort();
@@ -484,15 +470,12 @@ function extractMedicineProfile(name) {
     if (/^\d+(?:\.\d+)?$/u.test(token)) {
       const joinedWithPrevious =
         previous &&
-        hasJoinedMedicineTokenSequence(name, previous, token) &&
+        hasJoinedMedicineTokenSequence(normalizedName, previous, token) &&
         previous !== 'д' &&
         !MEDICINE_UNIT_TOKENS.has(previous) &&
         !MEDICINE_FORM_TOKENS.has(previous) &&
         !MEDICINE_DESCRIPTOR_TOKENS.has(previous);
-      const prefixedNumericToken = extractPrefixedMedicineNumericToken(name, token);
-      const normalizedName = String(name || '')
-        .toLowerCase()
-        .replace(/ё/g, 'е');
+      const prefixedNumericToken = extractPrefixedMedicineNumericToken(normalizedName, token);
       const prefixedNumericIsVitaminCode =
         prefixedNumericToken && normalizedName.includes(`${prefixedNumericToken} витамин`);
 

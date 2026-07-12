@@ -31,22 +31,13 @@ function escapeLikePattern(value) {
   return String(value || '').replace(/[\\%_]/g, '\\$&');
 }
 
-const NORMALIZATION_MODES = {
-  sql: [
-    (value) => value.toLowerCase(),
-    (value) => value.replace(/ё/g, 'е'),
-    (value) => value.trim(),
-  ],
-};
-
 function normalizeText(value, mode = 'sql') {
-  const rules = NORMALIZATION_MODES[mode];
-  if (!rules) throw new Error(`Unknown normalization mode: ${mode}`);
-  return rules.reduce((normalized, rule) => rule(normalized), String(value || ''));
+  if (mode !== 'sql') throw new Error(`Unknown normalization mode: ${mode}`);
+  return String(value || '').toLowerCase().replace(/ё/g, 'е').trim();
 }
 
 function normalizeSqlTerm(value) {
-  return normalizeText(value, 'sql');
+  return normalizeText(value);
 }
 
 const HOMOGLYPH_WORD_RE = /[\p{L}\p{N}]+(?:[.'\u2019-][\p{L}\p{N}]+)*/gu;

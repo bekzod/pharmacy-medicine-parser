@@ -67,9 +67,7 @@ function maybeInferOralLiquidSpacedDoseRatio({ state }) {
       },
     );
 
-    for (let index = denominatorVolume.startIndex; index <= denominatorVolume.endIndex; index += 1) {
-      state.setRole(index, 'strength');
-    }
+    state.consumeRange(denominatorVolume.startIndex, denominatorVolume.endIndex, 'strength');
     state.removeVolume(volumeIndex);
   }
 }

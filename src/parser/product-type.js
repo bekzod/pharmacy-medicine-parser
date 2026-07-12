@@ -55,40 +55,7 @@ function isBrandOnlyProductType(productType) {
   return productType === 'device' || productType === 'other';
 }
 
-// Pairs where both forms appear explicitly but only the first should win.
-// e.g. "пор. д/сусп." (powder for suspension) is sold/stored as suspension,
-// so keep suspension and drop powder regardless of encounter order.
-const EXPLICIT_DOSAGE_FORM_KEEP_PAIRS = new Set([
-  'spray|suspension',
-  'drops|suspension',
-  'enema|solution',
-  'aerosol|inhaler',
-  'suspension|powder',
-  // "р-р д/внутрь и инг" (solution sold both for oral use and inhalation,
-  // e.g. Лазолван 7,5 мг/мл): catalog rows store this as solution/drops, so
-  // a trailing "инг" route hint must not override the primary solution form.
-  // The reverse direction (genuine inhalers) never carries a "р-р" token —
-  // "р-р д/инг" / "д/инг" are pre-normalized to bare " инг ".
-  'solution|inhaler',
-]);
-
-function shouldKeepCurrentDosageForm({
-  currentDosageForm,
-  currentSource,
-  nextDosageForm,
-  nextSource,
-}) {
-  if (currentSource !== 'explicit' || nextSource !== 'explicit') return false;
-  return EXPLICIT_DOSAGE_FORM_KEEP_PAIRS.has(`${currentDosageForm}|${nextDosageForm}`);
-}
-
-function shouldOverrideDosageFormForFinalForm(currentDosageForm, nextDosageForm) {
-  return currentDosageForm === 'powder' && nextDosageForm === 'suspension';
-}
-
 module.exports = {
   classifyProductType,
   isBrandOnlyProductType,
-  shouldKeepCurrentDosageForm,
-  shouldOverrideDosageFormForFinalForm,
 };

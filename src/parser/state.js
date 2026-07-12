@@ -1,3 +1,13 @@
+// Pairs where both forms appear explicitly but only the current form should win.
+const EXPLICIT_DOSAGE_FORM_KEEP_PAIRS = new Set([
+  'spray|suspension',
+  'drops|suspension',
+  'enema|solution',
+  'aerosol|inhaler',
+  'suspension|powder',
+  'solution|inhaler',
+]);
+
 class ParseState {
   constructor({ rawQuery, normalizedText, tokens }) {
     this.rawQuery = rawQuery || '';
@@ -83,10 +93,7 @@ class ParseState {
     this.containerType = value;
   }
 
-  considerDosageFormToken(token, {
-    shouldKeepCurrentDosageForm,
-    shouldOverrideDosageFormForFinalForm,
-  }) {
+  considerDosageFormToken(token) {
     const sourcePriority = token.dosageFormSource === 'explicit' ? 2 : 1;
     const currentSourcePriority =
       this.dosageFormSource === 'explicit'
@@ -94,30 +101,24 @@ class ParseState {
         : this.dosageFormSource === 'inferred_from_container'
           ? 1
           : 0;
-    const keepCurrentDosageForm = shouldKeepCurrentDosageForm({
-      currentDosageForm: this.dosageForm,
-      currentSource: this.dosageFormSource,
-      nextDosageForm: token.dosageForm,
-      nextSource: token.dosageFormSource,
-    });
+    const keepCurrentDosageForm =
+      this.dosageFormSource === 'explicit' &&
+      token.dosageFormSource === 'explicit' &&
+      EXPLICIT_DOSAGE_FORM_KEEP_PAIRS.has(`${this.dosageForm}|${token.dosageForm}`);
+    const overrideForFinalForm =
+      this.dosageForm === 'powder' && token.dosageForm === 'suspension';
+    const shouldReplace =
+      overrideForFinalForm ||
+      !this.dosageFormToken ||
+      sourcePriority > currentSourcePriority ||
+      (sourcePriority === currentSourcePriority &&
+        token.priority >= this.dosageFormToken.priority);
 
-    const overrideForFinalForm = shouldOverrideDosageFormForFinalForm(
-      this.dosageForm,
-      token.dosageForm,
-    );
+    if (keepCurrentDosageForm || !shouldReplace) return;
 
-    if (
-      !keepCurrentDosageForm &&
-      (overrideForFinalForm ||
-        !this.dosageFormToken ||
-        sourcePriority > currentSourcePriority ||
-        (sourcePriority === currentSourcePriority &&
-          token.priority >= this.dosageFormToken.priority))
-    ) {
-      this.dosageForm = token.dosageForm;
-      this.dosageFormToken = token;
-      this.dosageFormSource = token.dosageFormSource;
-    }
+    this.dosageForm = token.dosageForm;
+    this.dosageFormToken = token;
+    this.dosageFormSource = token.dosageFormSource;
   }
 
   annotatedTokens() {
