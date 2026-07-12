@@ -11,7 +11,6 @@ const {
 } = require('./normalization');
 const {
   inferBareKapDosageForm,
-  tokenizeMedicineQuery,
   tokenizeNormalizedQuery,
 } = require('./tokenizer');
 const { collectAnnotationNoiseTokens } = require('./annotations');
@@ -74,8 +73,6 @@ const {
 const {
   classifyProductType,
   isBrandOnlyProductType,
-  shouldKeepCurrentDosageForm,
-  shouldOverrideDosageFormForFinalForm,
 } = require('./product-type');
 const {
   isMeaningfulTradeNameWordToken,
@@ -289,10 +286,7 @@ function parsePackContainerAndFormPass(tokens, state, hasRawPackMultiplier) {
         continue;
       }
 
-      state.considerDosageFormToken(token, {
-        shouldKeepCurrentDosageForm,
-        shouldOverrideDosageFormForFinalForm,
-      });
+      state.considerDosageFormToken(token);
 
       if (token.containerType) state.setContainerType(token.containerType);
 
@@ -334,16 +328,17 @@ function buildDimensionVolumeNode(tokens, index) {
   };
 }
 
-function applyCandidateRule(state, node, role, addNode) {
-  addNode(node);
+function applyCandidateRule(state, node, role) {
+  if (role === 'strength') state.addStrength(node);
+  else state.addVolume(node);
   state.consumeRange(node.startIndex, node.endIndex, role);
   return node.endIndex;
 }
 
-function runCandidateRules(state, tokens, index, rules) {
-  for (const buildCandidate of rules) {
+function runCandidateRules(state, tokens, index) {
+  for (const buildCandidate of STRENGTH_CANDIDATE_RULES) {
     const node = buildCandidate(tokens, index);
-    if (node) return applyCandidateRule(state, node, 'strength', (candidate) => state.addStrength(candidate));
+    if (node) return applyCandidateRule(state, node, 'strength');
   }
   return null;
 }
@@ -392,9 +387,7 @@ function consumeStrengthOrVolumeNode(tokens, state, index) {
   if (isDoseCount) {
     const perDoseStrength = inferMultiValuePerDoseStrength(strengthNode, state.strengthCandidates);
     if (perDoseStrength) {
-      return applyCandidateRule(state, perDoseStrength, 'strength', (candidate) =>
-        state.addStrength(candidate),
-      );
+      return applyCandidateRule(state, perDoseStrength, 'strength');
     }
   }
 
@@ -422,11 +415,11 @@ function parseExplicitMeasurementsPass(tokens, state) {
 
     const dimensionVolume = buildDimensionVolumeNode(tokens, index);
     if (dimensionVolume) {
-      index = applyCandidateRule(state, dimensionVolume, 'volume', (node) => state.addVolume(node));
+      index = applyCandidateRule(state, dimensionVolume, 'volume');
       continue;
     }
 
-    const ruleEndIndex = runCandidateRules(state, tokens, index, STRENGTH_CANDIDATE_RULES);
+    const ruleEndIndex = runCandidateRules(state, tokens, index);
     if (ruleEndIndex != null) {
       index = ruleEndIndex;
       continue;
@@ -454,14 +447,7 @@ function promoteStandalonePackageMasses(state) {
   for (let i = state.strengthCandidates.length - 1; i >= 0; i -= 1) {
     const s = state.strengthCandidates[i];
     if (s.kind !== 'simple' || (s.unit !== 'г' && s.unit !== 'л')) continue;
-    state.addVolume(
-      buildMeasurementNode(
-        { value: String(s.value), normalizedValue: null },
-        { normalizedValue: s.unit },
-        s.startIndex,
-        s.endIndex,
-      ),
-    );
+    state.addVolume(buildMeasurementNodeFromStrength(s));
     for (let ci = s.startIndex; ci <= s.endIndex; ci += 1) {
       state.setRole(ci, 'volume');
     }
@@ -560,7 +546,7 @@ function isInjectionOrInfusionContext(state, dosageFormRoute) {
     ['injection', 'infusion'].includes(dosageFormRoute);
 }
 
-function convertInjectableOmittedMassSlashVolume(state, tokens, dosageFormRoute) {
+function convertInjectableOmittedMassSlashVolume(state, dosageFormRoute) {
   if (!isInjectionOrInfusionContext(state, dosageFormRoute) || state.strengthCandidates.length > 0) return;
 
   const malformedVolumeIndex = state.volumeCandidates.findIndex(
@@ -628,16 +614,13 @@ function runStrengthVolumePostProcessing({ state, tokens, rawQuery, normalizedTe
   convertSyringeDoseStrengths(state, rawQuery, normalizedText);
   convertMassStrengthsToPerDoseWhenExplicit(tokens, state);
   const dosageFormRoute = detectDosageFormRoute(rawQuery);
-  convertInjectableOmittedMassSlashVolume(state, tokens, dosageFormRoute);
+  convertInjectableOmittedMassSlashVolume(state, dosageFormRoute);
   convertInjectableOmittedMassSeparateSlashVolumes(state, tokens, dosageFormRoute);
 }
 
 function maybePromoteInjectableDenominatorVolumes(state, dosageFormRoute) {
   const isInjectableContext =
-    dosageFormRoute === 'infusion' ||
-    dosageFormRoute === 'injection' ||
-    state.dosageForm === 'injection' ||
-    state.dosageForm === 'infusion' ||
+    isInjectionOrInfusionContext(state, dosageFormRoute) ||
     (state.dosageForm === 'solution' &&
       state.dosageFormSource === 'inferred_from_container' &&
       state.containerType === 'vial');

@@ -319,11 +319,6 @@ const MEDICINE_DOSAGE_FORMS = [
   },
 ];
 
-const DOSAGE_FORM_PATTERNS = MEDICINE_DOSAGE_FORMS.map(({ form, parsePatterns }) => ({
-  form,
-  patterns: parsePatterns,
-}));
-
 const MEDICINE_FORM_NORMALIZERS = MEDICINE_DOSAGE_FORMS.flatMap(({ profile }) => {
   if (!profile) return [];
   return profile.tokenPatterns.map((pattern) => [pattern, profile.token]);
@@ -345,8 +340,8 @@ const MEDICINE_FORM_TO_DOSAGE_FORMS = new Map(
 
 function parseDosageForm(name) {
   if (!name) return null;
-  for (const { form, patterns } of DOSAGE_FORM_PATTERNS) {
-    for (const pattern of patterns) {
+  for (const { form, parsePatterns } of MEDICINE_DOSAGE_FORMS) {
+    for (const pattern of parsePatterns) {
       if (pattern.test(name)) return form;
     }
   }

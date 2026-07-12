@@ -283,7 +283,6 @@ function buildStrengthSearchTextsWithPolicy(strengths, volumes = [], { strict = 
       addUnitEquivalentStrengthTexts(values, strength);
     } else {
       addPlainStrengthText(values, strength);
-      addDoseUnitAliasStrengthTexts(values, strength);
     }
   }
 
@@ -413,13 +412,7 @@ function addSameDenominatorRatioStrengthTexts(values, strengths) {
 }
 
 function buildVolumeSearchTexts(volumes) {
-  const values = new Set();
-
-  for (const volume of volumes) {
-    if (volume?.text) values.add(volume.text);
-  }
-
-  return [...values];
+  return [...new Set((volumes || []).map((volume) => volume?.text).filter(Boolean))];
 }
 
 function unitValuesMatch(left, right) {
@@ -501,18 +494,12 @@ function buildSimilarityExpression(columnExpr, includeTrigram) {
   return `GREATEST(${parts.join(', ')})`;
 }
 
-function buildBrandOnlyNameSimilarityExpression(columnExpr, includeTrigram) {
-  const base = buildSimilarityExpression(columnExpr, includeTrigram);
-  return `(${base}) * 0.82`;
-}
-
-function buildCandidateIdBranches(candidateBaseConditions, candidateJoinSql, candidatePredicates) {
+function buildCandidateIdBranches(candidateBaseConditions, candidatePredicates) {
   return candidatePredicates
     .map(
       (predicate, index) => `SELECT id FROM (
         SELECT m.id
         FROM medicines m
-        ${candidateJoinSql}
         WHERE ${[...candidateBaseConditions, predicate].join('\n          AND ')}
         LIMIT :candidateLimit
       ) candidate_id_branch_${index}`,
@@ -576,7 +563,6 @@ function deriveSearchText(parsedQuery, options = {}) {
 
   return {
     attributes,
-    options,
     searchMode,
     brandOnlySearch,
     structuredSearch,
@@ -666,7 +652,7 @@ function buildScoreExpression(context) {
   } = context;
   const tradeNameSimilarityExpression = buildSimilarityExpression(normalizedTradeNameExpr, includeTrigram);
   const nameSimilarityExpression = brandOnlySearch
-    ? buildBrandOnlyNameSimilarityExpression(normalizedNameExpr, includeTrigram)
+    ? `(${buildSimilarityExpression(normalizedNameExpr, includeTrigram)}) * 0.82`
     : null;
   const candidateOrderExpression = brandOnlySearch
     ? `GREATEST(${tradeNameSimilarityExpression}, coalesce(${nameSimilarityExpression}, 0))`
@@ -881,7 +867,7 @@ function renderMedicineSearchSql(context) {
   const useUnionCandidateIds = brandOnlySearch && !needsVendorCountryJoin && candidatePredicates.length > 1;
   const candidateCteSql = useUnionCandidateIds
     ? `candidate_ids AS MATERIALIZED (
-      ${buildCandidateIdBranches(candidateBaseConditions, candidateJoinSql, candidatePredicates)}
+      ${buildCandidateIdBranches(candidateBaseConditions, candidatePredicates)}
     ),
     candidates AS MATERIALIZED (
       SELECT

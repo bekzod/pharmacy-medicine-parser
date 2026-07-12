@@ -15,21 +15,15 @@ function buildMeasurementNode(numberToken, unitToken, startIndex, endIndex) {
 function buildMeasurementNodeFromStrength(strengthNode) {
   if (!strengthNode || strengthNode.kind !== 'simple' || !strengthNode.unit) return null;
 
-  if (strengthNode.value != null) {
-    return buildMeasurementNode(
-      { value: String(strengthNode.value), normalizedValue: null },
-      { normalizedValue: strengthNode.unit },
-      strengthNode.startIndex,
-      strengthNode.endIndex,
-    );
-  }
-
+  const hasSingleValue = strengthNode.value != null;
   const values = Array.isArray(strengthNode.values) ? strengthNode.values : [];
-  if (values.length < 2 || !values.every((value) => Number.isFinite(value))) return null;
+  if (!hasSingleValue && (values.length < 2 || !values.every(Number.isFinite))) return null;
 
   return {
-    text: strengthNode.text,
-    value: null,
+    text: hasSingleValue
+      ? `${strengthNode.value} ${strengthNode.unit}`
+      : strengthNode.text,
+    value: hasSingleValue ? Number.parseFloat(strengthNode.value) : null,
     unit: strengthNode.unit,
     startIndex: strengthNode.startIndex,
     endIndex: strengthNode.endIndex,
@@ -909,17 +903,17 @@ function buildPerDoseRatioStrength(strength, value = strength.value) {
 }
 
 function inferMeteredDoseStrengths(strengths, volumes, dosageForm) {
-  if (dosageForm !== 'aerosol' && dosageForm !== 'inhaler' && dosageForm !== 'spray') {
+  if (!['aerosol', 'inhaler', 'spray'].includes(dosageForm)) {
     return { strengths, volumes };
   }
 
-  const doseVolume = (volumes || []).find(
+  const hasDoseVolume = (volumes || []).some(
     (volume) =>
       volume?.unit === 'доз' &&
       Number.isFinite(Number(volume.value)) &&
       Number(volume.value) > 1,
   );
-  if (!doseVolume) return { strengths, volumes };
+  if (!hasDoseVolume) return { strengths, volumes };
 
   const simpleStrengths = (strengths || []).filter(
     (strength) =>
@@ -936,18 +930,16 @@ function inferMeteredDoseStrengths(strengths, volumes, dosageForm) {
       strength.values.every((value) => Number.isFinite(Number(value)) && Number(value) > 0) &&
       ['мг', 'мкг'].includes(String(strength.unit || '').toLowerCase()),
   );
-  if (simpleStrengths.length === 0 && multiValueSimpleStrengths.length === 1) {
-    const strengthToConvert = multiValueSimpleStrengths[0];
-    return {
-      strengths: (strengths || []).flatMap((strength) =>
-        strength === strengthToConvert
-          ? strength.values.map((value) => buildPerDoseRatioStrength(strength, value))
-          : [strength],
-      ),
-      volumes,
-    };
-  }
-  if (simpleStrengths.length !== 1) {
+  let strengthToConvert;
+  let valuesToConvert;
+
+  if (simpleStrengths.length === 1) {
+    [strengthToConvert] = simpleStrengths;
+    valuesToConvert = [strengthToConvert.value];
+  } else if (simpleStrengths.length === 0 && multiValueSimpleStrengths.length === 1) {
+    [strengthToConvert] = multiValueSimpleStrengths;
+    valuesToConvert = strengthToConvert.values;
+  } else {
     const packageMassRatios = (strengths || []).filter(
       (strength) =>
         strength?.kind === 'ratio' &&
@@ -956,22 +948,15 @@ function inferMeteredDoseStrengths(strengths, volumes, dosageForm) {
         strength.denominator?.unit === 'г',
     );
     if (packageMassRatios.length !== 1) return { strengths, volumes };
-
-    const strengthToConvert = packageMassRatios[0];
-    return {
-      strengths: (strengths || []).map((strength) =>
-        strength === strengthToConvert
-          ? buildPerDoseRatioStrength(strength)
-          : strength,
-      ),
-      volumes,
-    };
+    [strengthToConvert] = packageMassRatios;
+    valuesToConvert = [strengthToConvert.value];
   }
 
-  const strengthToConvert = simpleStrengths[0];
   return {
-    strengths: (strengths || []).map((strength) =>
-      strength === strengthToConvert ? buildPerDoseRatioStrength(strength) : strength,
+    strengths: (strengths || []).flatMap((strength) =>
+      strength === strengthToConvert
+        ? valuesToConvert.map((value) => buildPerDoseRatioStrength(strength, value))
+        : [strength],
     ),
     volumes,
   };
