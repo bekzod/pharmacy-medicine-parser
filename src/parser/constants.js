@@ -334,7 +334,8 @@ const DOSAGE_FORM_ROUTE_PATTERNS = [
   { route: 'infusion', pattern: new RegExp(`${RP}\\.?\\s*инф[а-я]*\\.?`, 'iu') },
   { route: 'infusion', pattern: /д\s*\/\s*инф[а-я]*\.?/iu },
   { route: 'infusion', pattern: /раствор\s+для\s+(?:внутривенн[а-я]*\s+)?инфузи[а-я]*/iu },
-  { route: 'infusion', pattern: /(?<![а-я])инфуз(?!иол)[а-я]*/iu },
+  // Do not infer an infusion route from brand names such as "Инфузомер".
+  { route: 'infusion', pattern: /(?<![\p{L}])инфуз(?:и(?!ол)[а-я]*)?(?![\p{L}])/iu },
   // Negative lookahead must exclude "инф" (infusion) AND "инг" (inhalation)
   // so neither route gets misclassified as injection.
   { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*и\\.?`, 'iu') },

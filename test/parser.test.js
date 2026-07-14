@@ -869,6 +869,13 @@ const measurementAndRouteCases = [
   volumes: [ { text: '100 мл', value: 100, unit: 'мл' } ],
   pack_count: 1
 }],
+  ['keeps Infuzomer as a trade name while preserving its infusion route', 'инфузомер р-р д/инф 40мг/250мл', {
+  trade_name_text: 'инфузомер',
+  dosage_form: 'solution',
+  dosage_form_route: 'infusion',
+  strengths: [ratio('40 мг/250 мл', [40], 40, 'мг', { value: 250, unit: 'мл' })],
+  volumes: [volume('250 мл', 250, 'мл')]
+}],
   ['keeps decimal package volume in injectable activity-unit strength', 'Эспоген р-р д/инъек.2000МЕ 0.5мл №6', {
   trade_name_text: 'эспоген',
   dosage_form: 'injection',
