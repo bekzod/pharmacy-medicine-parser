@@ -59,14 +59,16 @@ const MEDICINE_DOSAGE_FORMS = [
     parsePatterns: [
       /р\s*-\s*р\.?\s*д\s*\/\s*инф\.?/iu,
       /р\s*-\s*р\.?\s*для\s*\/\s*инф\.?/iu,
-      /инфуз(?!иол)/iu,
+      // Match the infusion stem and its inflectional forms, but not brand
+      // names that merely start with it (e.g. "Инфузомер").
+      /(?<![\p{L}])инфуз(?:и(?!ол)[а-я]*)?(?![\p{L}])/iu,
       /д\/инф/iu,
       wholeToken('инф\\.?'),
     ],
     profile: {
       token: 'инф',
       priority: 3,
-      tokenPatterns: [/^(инф\.?|инфуз(?!иол)[а-я]*)$/u],
+      tokenPatterns: [/^(инф\.?|инфуз(?:и(?!ол)[а-я]*)?)$/u],
     },
   },
   {
