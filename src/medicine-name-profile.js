@@ -1,4 +1,5 @@
-const { buildQueryVariants, normalizeMedicineFormPhrases } = require('./medicine-fuzzy-search');
+const { buildQueryVariants } = require('./medicine-fuzzy-search');
+const { normalizeMedicineLanguage } = require('./medicine-language');
 const {
   MEDICINE_FORM_NORMALIZERS,
   MEDICINE_FORM_PRIORITIES,
@@ -249,7 +250,7 @@ function normalizePackValue(value) {
 }
 
 function normalizeMedicineSearchText(name) {
-  return normalizeLatinHomoglyphs(normalizeMedicineFormPhrases(name))
+  return normalizeLatinHomoglyphs(normalizeMedicineLanguage(name))
     .replace(/(\d)[.,](\d)/gu, `$1${MEDICINE_DECIMAL_MARKER}$2`)
     .replace(/(\d)\s*(%)/gu, '$1 $2')
     .replace(/(%)(\d)/gu, '$1 $2')

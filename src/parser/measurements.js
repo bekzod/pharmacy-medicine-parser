@@ -1,8 +1,20 @@
-const { UNIT_FAMILY_BY_VALUE } = require('./constants');
+const {
+  COUNT_BEFORE_FORM_DOSAGE_FORMS,
+  ORAL_SOLID_FORMS_WITH_IMPLICIT_MG,
+  UNIT_FAMILY_BY_VALUE,
+} = require('./constants');
 
 const TRAILING_UNIT_COMBINATION_FORMS = new Set(['tablet', 'capsule', 'pastille', 'granule']);
 const METERED_DOSAGE_FORMS = new Set(['aerosol', 'inhaler', 'spray']);
 const MASS_NUMERATOR_UNITS = new Set(['мг', 'мкг']);
+const MASS_UNITS_FOR_DOSE_INFERENCE = new Set(['мкг', 'мг', 'г']);
+const STRENGTH_CANDIDATE_RULES = [
+  buildCombinationStrengthCandidate,
+  buildPlusSeparatedSharedDenominatorRatioStrength,
+  buildPercentStrengthNode,
+  buildPlusSeparatedSharedUnitStrength,
+  buildMultiComponentRatioStrength,
+];
 
 function buildMeasurementNode(numberToken, unitToken, startIndex, endIndex) {
   return {
@@ -93,6 +105,49 @@ function collectNumericSequence(tokens, startIndex) {
   }
 
   return { values, nextIndex };
+}
+
+function inferMassUnitFromConcentration(strengthCandidates) {
+  for (let index = strengthCandidates.length - 1; index >= 0; index -= 1) {
+    const strength = strengthCandidates[index];
+    if (
+      strength?.kind === 'ratio' &&
+      MASS_UNITS_FOR_DOSE_INFERENCE.has(strength.unit) &&
+      strength.denominator?.unit === 'мл'
+    ) {
+      return strength.unit;
+    }
+  }
+
+  return null;
+}
+
+function inferMultiValuePerDoseStrength(strengthNode, strengthCandidates) {
+  const values = Array.isArray(strengthNode?.values) ? strengthNode.values : [];
+  const hasFractionalValue = values.some(
+    (value) => Number.isFinite(value) && !Number.isInteger(value),
+  );
+  if (
+    strengthNode?.kind !== 'simple' ||
+    strengthNode.unit !== 'доз' ||
+    strengthNode.value != null ||
+    values.length < 2 ||
+    !hasFractionalValue ||
+    !values.every((value) => Number.isFinite(value) && value > 0)
+  ) {
+    return null;
+  }
+
+  const inferredUnit = inferMassUnitFromConcentration(strengthCandidates);
+  if (!inferredUnit) return null;
+
+  return buildRatioStrengthNode(
+    values,
+    inferredUnit,
+    { value: null, unit: 'доз' },
+    strengthNode.startIndex,
+    strengthNode.endIndex,
+  );
 }
 
 function buildPercentStrengthNode(tokens, startIndex) {
@@ -327,6 +382,157 @@ function buildCombinationStrengthCandidate(tokens, startIndex) {
 
   if (components.length < 2) return null;
   return buildCombinationStrengthNode(components, startIndex, components.at(-1).endIndex);
+}
+
+function buildDimensionVolumeNode(tokens, index) {
+  const token = tokens[index];
+  if (
+    tokens[index + 1]?.type !== 'UNIT' ||
+    UNIT_FAMILY_BY_VALUE.get(tokens[index + 1].normalizedValue) !== 'length' ||
+    tokens[index + 2]?.type !== 'WORD' ||
+    !['х', 'x'].includes(tokens[index + 2].normalizedValue) ||
+    tokens[index + 3]?.type !== 'NUMBER' ||
+    tokens[index + 4]?.type !== 'UNIT' ||
+    UNIT_FAMILY_BY_VALUE.get(tokens[index + 4].normalizedValue) !== 'length'
+  ) {
+    return null;
+  }
+
+  return {
+    text: `${token.value} ${tokens[index + 1].normalizedValue} х ${tokens[index + 3].value} ${tokens[index + 4].normalizedValue}`,
+    value: Number.parseFloat(token.value),
+    unit: tokens[index + 1].normalizedValue,
+    dimension2: {
+      value: Number.parseFloat(tokens[index + 3].value),
+      unit: tokens[index + 4].normalizedValue,
+    },
+    startIndex: index,
+    endIndex: index + 4,
+  };
+}
+
+function applyCandidateRule(state, node, role) {
+  if (role === 'strength') state.addStrength(node);
+  else state.addVolume(node);
+  state.consumeRange(node.startIndex, node.endIndex, role);
+  return node.endIndex;
+}
+
+function runCandidateRules(state, tokens, index) {
+  for (const buildCandidate of STRENGTH_CANDIDATE_RULES) {
+    const node = buildCandidate(tokens, index);
+    if (node) return applyCandidateRule(state, node, 'strength');
+  }
+  return null;
+}
+
+function hasRepeatedStrengthNumberLater(tokens, index) {
+  const token = tokens[index];
+  if (token?.type !== 'NUMBER') return false;
+
+  for (let cursor = index + 1; cursor < tokens.length - 1; cursor += 1) {
+    if (tokens[cursor]?.type !== 'NUMBER') continue;
+    if (tokens[cursor].value !== token.value) continue;
+
+    const next = tokens[cursor + 1];
+    if (next?.type !== 'UNIT') continue;
+    const unitFamily = UNIT_FAMILY_BY_VALUE.get(next.normalizedValue);
+    if (unitFamily === 'mass' || unitFamily === 'percent' || next.normalizedValue === '%') {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function maybeConsumePackBeforeContainerOrForm(tokens, state, index) {
+  const token = tokens[index];
+  if (
+    state.packCount == null &&
+    tokens[index + 1]?.type === 'CONTAINER' &&
+    tokens[index + 1].containerType === 'sachet' &&
+    Number.isFinite(token.numericValue) &&
+    Number.isInteger(token.numericValue) &&
+    token.numericValue > 0
+  ) {
+    state.setPackCount(token.numericValue);
+    state.consume(index, 'pack');
+    return true;
+  }
+
+  if (
+    state.packCount == null &&
+    tokens[index + 1]?.type === 'DOSAGE_FORM' &&
+    COUNT_BEFORE_FORM_DOSAGE_FORMS.has(tokens[index + 1].dosageForm) &&
+    Number.isFinite(token.numericValue) &&
+    Number.isInteger(token.numericValue) &&
+    token.numericValue > 0 &&
+    !hasRepeatedStrengthNumberLater(tokens, index)
+  ) {
+    state.setPackCount(token.numericValue);
+    state.consume(index, 'pack');
+    return true;
+  }
+
+  return false;
+}
+
+function consumeStrengthOrVolumeNode(tokens, state, index) {
+  const strengthNode = buildStrengthNode(tokens, index);
+  if (!strengthNode) return null;
+
+  const unitFamily = UNIT_FAMILY_BY_VALUE.get(strengthNode.unit);
+  const isDoseCount = strengthNode.kind === 'simple' && strengthNode.unit === 'доз';
+  const isVolumeNode =
+    strengthNode.kind === 'simple' &&
+    (unitFamily === 'volume' || unitFamily === 'length' || isDoseCount);
+  if (isDoseCount) {
+    const perDoseStrength = inferMultiValuePerDoseStrength(
+      strengthNode,
+      state.strengthCandidates,
+    );
+    if (perDoseStrength) return applyCandidateRule(state, perDoseStrength, 'strength');
+  }
+
+  if (isVolumeNode) {
+    const measurementNode = buildMeasurementNodeFromStrength(strengthNode);
+    if (measurementNode) state.addVolume(measurementNode);
+  } else {
+    state.addStrength(strengthNode);
+  }
+
+  state.consumeRange(
+    strengthNode.startIndex,
+    strengthNode.endIndex,
+    isVolumeNode ? 'volume' : 'strength',
+  );
+  return strengthNode.endIndex;
+}
+
+function parseExplicitMeasurementCandidates(tokens, state) {
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (state.hasConsumed(index)) continue;
+
+    const token = tokens[index];
+    if (token.type !== 'NUMBER') continue;
+
+    const dimensionVolume = buildDimensionVolumeNode(tokens, index);
+    if (dimensionVolume) {
+      index = applyCandidateRule(state, dimensionVolume, 'volume');
+      continue;
+    }
+
+    const ruleEndIndex = runCandidateRules(state, tokens, index);
+    if (ruleEndIndex != null) {
+      index = ruleEndIndex;
+      continue;
+    }
+
+    if (maybeConsumePackBeforeContainerOrForm(tokens, state, index)) continue;
+
+    const strengthEndIndex = consumeStrengthOrVolumeNode(tokens, state, index);
+    if (strengthEndIndex != null) index = strengthEndIndex;
+  }
 }
 
 function strengthComponentValues(strength) {
@@ -949,34 +1155,103 @@ function inferMeteredDoseStrengths(strengths, volumes, dosageForm) {
   };
 }
 
+function fixOralSolidMlStrengthTypo(strengths, dosageForm) {
+  if (!ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(dosageForm)) return strengths;
+
+  return strengths.map((strength) => {
+    if (
+      strength?.kind !== 'ratio' ||
+      strength.denominator?.unit !== 'мл' ||
+      strength.unit !== 'мг' ||
+      strength.value == null ||
+      strength.denominator.value == null
+    ) {
+      return strength;
+    }
+
+    const values = [strength.value, strength.denominator.value];
+    return {
+      kind: 'simple',
+      text: values.map((value) => `${value} мг`).join('/'),
+      values,
+      value: null,
+      unit: 'мг',
+    };
+  });
+}
+
+function finalizePublicMeasurements(state, normalizedText) {
+  let strengths = dedupePublicNodes(
+    state.strengthCandidates.map(toPublicStrengthNode).filter(Boolean),
+  );
+  strengths = fixOralSolidMlStrengthTypo(strengths, state.dosageForm);
+  strengths = mergeSameUnitSlashStrength(strengths, normalizedText);
+  strengths = inferCompactPlusSharedDenominatorRatios(
+    strengths,
+    normalizedText,
+    state.dosageForm,
+  );
+  strengths = inferInhalationPerDoseStrengths(
+    strengths,
+    normalizedText,
+    state.dosageForm,
+  );
+  let volumes = dedupePublicNodes(
+    state.volumeCandidates.map(toPublicMeasurementNode).filter(Boolean),
+  );
+  ({ strengths, volumes } = splitTopicalPackageMassRatios(
+    strengths,
+    volumes,
+    state.dosageForm,
+  ));
+  ({ strengths, volumes } = inferTopicalDoseUnitPerGramStrength(
+    strengths,
+    volumes,
+    state.dosageForm,
+  ));
+  ({ strengths, volumes } = inferDropsMassPackageRatio(
+    strengths,
+    volumes,
+    state.dosageForm,
+  ));
+  strengths = inferDropsMassPerMlStrengths(strengths, volumes, state.dosageForm);
+  strengths = inferLiquidPlusMlComponentTypo(
+    strengths,
+    state.dosageForm,
+    normalizedText,
+  );
+  ({ strengths, volumes } = inferLiquidActivityUnitPackageRatio(
+    strengths,
+    volumes,
+    state.dosageForm,
+    normalizedText,
+  ));
+  ({ strengths, volumes } = inferMeteredDoseStrengths(
+    strengths,
+    volumes,
+    state.dosageForm,
+  ));
+  ({ strengths, volumes } = simplifyInhalationDoseRatios(
+    strengths,
+    volumes,
+    state.dosageForm,
+  ));
+  volumes = inferOralLiquidVolumeFromDoseCount(
+    strengths,
+    volumes,
+    state.dosageForm,
+  );
+  return { strengths, volumes: dedupePublicNodes(volumes) };
+}
+
 module.exports = {
   buildMeasurementNode,
   buildMeasurementNodeFromStrength,
   buildSimpleStrengthNode,
-  buildCombinationStrengthNode,
   buildRatioStrengthNode,
   collectNumericSequence,
-  buildPercentStrengthNode,
-  buildPlusSeparatedSharedUnitStrength,
-  buildPlusSeparatedSharedDenominatorRatioStrength,
-  buildMultiComponentRatioStrength,
-  buildStrengthNode,
-  buildCombinationStrengthCandidate,
-  isDuplicateTotalStrengthMarker,
-  toPublicStrengthNode,
-  toPublicMeasurementNode,
-  dedupePublicNodes,
+  finalizePublicMeasurements,
   formatNormalizedNumber,
-  mergeSameUnitSlashStrength,
-  inferInhalationPerDoseStrengths,
-  inferCompactPlusSharedDenominatorRatios,
-  simplifyInhalationDoseRatios,
-  inferOralLiquidVolumeFromDoseCount,
-  splitTopicalPackageMassRatios,
-  inferTopicalDoseUnitPerGramStrength,
-  inferDropsMassPackageRatio,
-  inferDropsMassPerMlStrengths,
-  inferLiquidPlusMlComponentTypo,
-  inferLiquidActivityUnitPackageRatio,
-  inferMeteredDoseStrengths,
+  isDuplicateTotalStrengthMarker,
+  parseExplicitMeasurementCandidates,
 };
