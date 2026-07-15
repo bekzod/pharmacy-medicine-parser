@@ -8,6 +8,10 @@ This context turns noisy pharmacy catalog text into medicine attributes and look
 A raw pharmacy catalog or user string that may contain a trade name, dosage form, measurements, pack information, annotations, and vendor country.
 _Avoid_: Search string, product text
 
+**Medicine Language**:
+The shared lexical conventions that canonicalize pharmacy abbreviations, routes, dosage-form phrases, measurement notation, and known source aliases.
+_Avoid_: Fuzzy rules, parser rewrites
+
 **Trade Identity**:
 The normalized commercial-name tokens that remain after medicine attributes, annotations, and vendor country are removed from a Medicine Query.
 _Avoid_: Residue, brand text
@@ -30,7 +34,8 @@ _Avoid_: Search mode, query variant
 
 ## Relationships
 
-- A **Medicine Query** produces exactly one **Trade Identity** and zero or more **Strengths** and **Package Measurements**.
+- A **Medicine Query** produces exactly one **Trade Identity** and zero or more **Strength** and **Package Measurement** values.
+- The **Medicine Language** canonicalizes a **Medicine Query** before its attributes are parsed.
 - A **Medicine Query** may identify one **Dosage Form**.
 - A **Lookup Profile** contains one interpretation of a **Medicine Query**.
 

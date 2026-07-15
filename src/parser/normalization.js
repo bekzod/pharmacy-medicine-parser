@@ -1,4 +1,4 @@
-const { normalizeMedicineFormPhrases } = require('../medicine-fuzzy-search');
+const { normalizeMedicineLanguage } = require('../medicine-language');
 const {
   MEDICINE_FORM_NORMALIZERS,
 } = require('../medicine-dosage-forms');
@@ -181,7 +181,7 @@ function normalizeRawSegment(segment) {
 }
 
 function normalizeMedicineQuery(rawQuery) {
-  const prepared = normalizeLatinHomoglyphs(normalizeMedicineFormPhrases(rawQuery))
+  const prepared = normalizeLatinHomoglyphs(normalizeMedicineLanguage(rawQuery))
     // Collapse "анти-Ха МЕ" / "анти-Xa МЕ" / "anti-Xa IU" modifiers to bare
     // "МЕ". The activity qualifier blocks the strength tokenizer (NUMBER must
     // be followed by UNIT), so anticoagulants priced per anti-Xa IU never
