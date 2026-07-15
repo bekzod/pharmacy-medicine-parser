@@ -272,6 +272,12 @@ const SYRINGE_RE = /шприц(?!-?\s*руч)(?:[а-я]*)?/iu;
 const PREFILLED_RE = /преднаполненн|(?:предварительно\s+)?(?:наполненн|заполненн)/iu;
 const PAREN_GROUP_RE = /\(([^()]+)\)/gu;
 const COUNT_BEFORE_FORM_DOSAGE_FORMS = new Set(['capsule', 'tablet']);
+const ORAL_SOLID_FORMS_WITH_IMPLICIT_MG = new Set([
+  'tablet',
+  'capsule',
+  'pastille',
+  'granule',
+]);
 const SIZE_CONTEXT_TOKENS = new Set(['р', 'раз', 'разм', 'размер']);
 
 const CONTAINER_NORMALIZERS = [
@@ -457,6 +463,7 @@ module.exports = {
   PREFILLED_RE,
   PAREN_GROUP_RE,
   COUNT_BEFORE_FORM_DOSAGE_FORMS,
+  ORAL_SOLID_FORMS_WITH_IMPLICIT_MG,
   SIZE_CONTEXT_TOKENS,
   CONTAINER_NORMALIZERS,
   DOSAGE_FORM_ROUTE_PATTERNS,

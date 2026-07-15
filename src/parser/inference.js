@@ -2,6 +2,7 @@ const {
   DOSAGE_FORM_ROUTE_PATTERNS,
   ORAL_LIQUID_DOSAGE_FORMS,
   ORAL_LIQUID_REFERENCE_VOLUME_ML,
+  ORAL_SOLID_FORMS_WITH_IMPLICIT_MG,
   PREFILLED_RE,
   SYRINGE_RE,
   UNIT_FAMILY_BY_VALUE,
@@ -73,49 +74,6 @@ function maybeInferOralLiquidSpacedDoseRatio({ state }) {
     state.consumeRange(denominatorVolume.startIndex, denominatorVolume.endIndex, 'strength');
     state.removeVolume(volumeIndex);
   }
-}
-
-function inferMassUnitFromConcentration(strengthCandidates) {
-  for (let i = strengthCandidates.length - 1; i >= 0; i -= 1) {
-    const strength = strengthCandidates[i];
-    if (
-      strength?.kind === 'ratio' &&
-      MASS_UNITS_FOR_DOSE_INFERENCE.has(strength.unit) &&
-      strength.denominator?.unit === 'мл'
-    ) {
-      return strength.unit;
-    }
-  }
-
-  return null;
-}
-
-function inferMultiValuePerDoseStrength(strengthNode, strengthCandidates) {
-  const values = Array.isArray(strengthNode?.values) ? strengthNode.values : [];
-  const hasFractionalValue = values.some(
-    (value) => Number.isFinite(value) && !Number.isInteger(value),
-  );
-  if (
-    strengthNode?.kind !== 'simple' ||
-    strengthNode.unit !== 'доз' ||
-    strengthNode.value != null ||
-    values.length < 2 ||
-    !hasFractionalValue ||
-    !values.every((value) => Number.isFinite(value) && value > 0)
-  ) {
-    return null;
-  }
-
-  const inferredUnit = inferMassUnitFromConcentration(strengthCandidates);
-  if (!inferredUnit) return null;
-
-  return buildRatioStrengthNode(
-    values,
-    inferredUnit,
-    { value: null, unit: 'доз' },
-    strengthNode.startIndex,
-    strengthNode.endIndex,
-  );
 }
 
 function isVitaminDTradeNameToken(token) {
@@ -222,12 +180,6 @@ function maybeInferEnzymeActivityStrength({ state, tradeNameTokens }) {
 // implicit unit is usually мг — e.g. "АЗИТОКОМ-500 ТАБ №3" → 500 мг,
 // "Сумамед 250 капс №6" → 250 мг. L-тироксин tablets are conventionally listed
 // in micrograms, so bare "100" maps to 100 мкг for that brand.
-const ORAL_SOLID_FORMS_WITH_IMPLICIT_MG = new Set([
-  'tablet',
-  'capsule',
-  'pastille',
-  'granule',
-]);
 const ORAL_SOLID_TRADES_WITH_LOW_IMPLICIT_MG = new Set([
   'афил',
   'беласкор',
@@ -815,25 +767,6 @@ function fixSolutionPerGramDenominatorTypo({ state, tradeNameTokens }) {
   }
 }
 
-function hasRepeatedStrengthNumberLater(tokens, index) {
-  const token = tokens[index];
-  if (token?.type !== 'NUMBER') return false;
-
-  for (let cursor = index + 1; cursor < tokens.length - 1; cursor += 1) {
-    if (tokens[cursor]?.type !== 'NUMBER') continue;
-    if (tokens[cursor].value !== token.value) continue;
-
-    const next = tokens[cursor + 1];
-    if (next?.type !== 'UNIT') continue;
-    const unitFamily = UNIT_FAMILY_BY_VALUE.get(next.normalizedValue);
-    if (unitFamily === 'mass' || unitFamily === 'percent' || next.normalizedValue === '%') {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 function hasPrefilledSyringeSignal(rawQuery, normalizedText) {
   const text = `${rawQuery || ''} ${normalizedText || ''}`;
   return SYRINGE_RE.test(text) && PREFILLED_RE.test(text);
@@ -1189,9 +1122,6 @@ function inferImplicitMedicineAttributes({
 }
 
 module.exports = {
-  ORAL_SOLID_FORMS_WITH_IMPLICIT_MG,
   inferImplicitMedicineAttributes,
-  inferMultiValuePerDoseStrength,
-  hasRepeatedStrengthNumberLater,
   normalizeExplicitMeasurementCandidates,
 };

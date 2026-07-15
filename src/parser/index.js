@@ -1,9 +1,8 @@
 const { transliterateLatinToCyrillic } = require('../medicine-fuzzy-search');
 const { extractVendorCountryFromTokens } = require('../vendor-country');
 const {
-  COUNT_BEFORE_FORM_DOSAGE_FORMS,
+  ORAL_SOLID_FORMS_WITH_IMPLICIT_MG,
   SIZE_CONTEXT_TOKENS,
-  UNIT_FAMILY_BY_VALUE,
 } = require('./constants');
 const {
   normalizeMedicineQuery,
@@ -15,38 +14,14 @@ const {
 } = require('./tokenizer');
 const { collectAnnotationNoiseTokens } = require('./annotations');
 const {
-  buildCombinationStrengthCandidate,
   buildMeasurementNode,
-  buildMeasurementNodeFromStrength,
-  buildMultiComponentRatioStrength,
-  buildPercentStrengthNode,
-  buildPlusSeparatedSharedDenominatorRatioStrength,
-  buildPlusSeparatedSharedUnitStrength,
-  buildRatioStrengthNode,
   buildSimpleStrengthNode,
-  buildStrengthNode,
-  dedupePublicNodes,
-  inferInhalationPerDoseStrengths,
-  inferDropsMassPackageRatio,
-  inferDropsMassPerMlStrengths,
-  inferCompactPlusSharedDenominatorRatios,
-  inferLiquidPlusMlComponentTypo,
-  inferLiquidActivityUnitPackageRatio,
-  inferMeteredDoseStrengths,
-  inferOralLiquidVolumeFromDoseCount,
-  inferTopicalDoseUnitPerGramStrength,
+  finalizePublicMeasurements,
   isDuplicateTotalStrengthMarker,
-  mergeSameUnitSlashStrength,
-  simplifyInhalationDoseRatios,
-  splitTopicalPackageMassRatios,
-  toPublicMeasurementNode,
-  toPublicStrengthNode,
+  parseExplicitMeasurementCandidates,
 } = require('./measurements');
 const {
-  ORAL_SOLID_FORMS_WITH_IMPLICIT_MG,
-  hasRepeatedStrengthNumberLater,
   inferImplicitMedicineAttributes,
-  inferMultiValuePerDoseStrength,
   normalizeExplicitMeasurementCandidates,
 } = require('./inference');
 const {
@@ -62,14 +37,6 @@ const { ParseState } = require('./state');
 
 const PULMICORT_AMPOULE_RE = /пульмикорт/iu;
 const AMPOULE_SUSPENSION_SIGNAL_RE = /амп|небул|сусп/iu;
-
-const STRENGTH_CANDIDATE_RULES = [
-  buildCombinationStrengthCandidate,
-  buildPlusSeparatedSharedDenominatorRatioStrength,
-  buildPercentStrengthNode,
-  buildPlusSeparatedSharedUnitStrength,
-  buildMultiComponentRatioStrength,
-];
 
 function normalizeTradeNameAbbrevTokens(tokens) {
   return tokens.flatMap((token) =>
@@ -276,137 +243,6 @@ function parsePackContainerAndFormPass(tokens, state, hasRawPackMultiplier) {
   }
 }
 
-function buildDimensionVolumeNode(tokens, index) {
-  const token = tokens[index];
-  if (
-    tokens[index + 1]?.type !== 'UNIT' ||
-    UNIT_FAMILY_BY_VALUE.get(tokens[index + 1].normalizedValue) !== 'length' ||
-    tokens[index + 2]?.type !== 'WORD' ||
-    (tokens[index + 2].normalizedValue !== 'х' && tokens[index + 2].normalizedValue !== 'x') ||
-    tokens[index + 3]?.type !== 'NUMBER' ||
-    tokens[index + 4]?.type !== 'UNIT' ||
-    UNIT_FAMILY_BY_VALUE.get(tokens[index + 4].normalizedValue) !== 'length'
-  ) {
-    return null;
-  }
-
-  return {
-    text: `${token.value} ${tokens[index + 1].normalizedValue} х ${tokens[index + 3].value} ${tokens[index + 4].normalizedValue}`,
-    value: Number.parseFloat(token.value),
-    unit: tokens[index + 1].normalizedValue,
-    dimension2: {
-      value: Number.parseFloat(tokens[index + 3].value),
-      unit: tokens[index + 4].normalizedValue,
-    },
-    startIndex: index,
-    endIndex: index + 4,
-  };
-}
-
-function applyCandidateRule(state, node, role) {
-  if (role === 'strength') state.addStrength(node);
-  else state.addVolume(node);
-  state.consumeRange(node.startIndex, node.endIndex, role);
-  return node.endIndex;
-}
-
-function runCandidateRules(state, tokens, index) {
-  for (const buildCandidate of STRENGTH_CANDIDATE_RULES) {
-    const node = buildCandidate(tokens, index);
-    if (node) return applyCandidateRule(state, node, 'strength');
-  }
-  return null;
-}
-
-function maybeConsumePackBeforeContainerOrForm(tokens, state, index) {
-  const token = tokens[index];
-  if (
-    state.packCount == null &&
-    tokens[index + 1]?.type === 'CONTAINER' &&
-    tokens[index + 1].containerType === 'sachet' &&
-    Number.isFinite(token.numericValue) &&
-    Number.isInteger(token.numericValue) &&
-    token.numericValue > 0
-  ) {
-    state.setPackCount(token.numericValue);
-    state.consume(index, 'pack');
-    return true;
-  }
-
-  if (
-    state.packCount == null &&
-    tokens[index + 1]?.type === 'DOSAGE_FORM' &&
-    COUNT_BEFORE_FORM_DOSAGE_FORMS.has(tokens[index + 1].dosageForm) &&
-    Number.isFinite(token.numericValue) &&
-    Number.isInteger(token.numericValue) &&
-    token.numericValue > 0 &&
-    !hasRepeatedStrengthNumberLater(tokens, index)
-  ) {
-    state.setPackCount(token.numericValue);
-    state.consume(index, 'pack');
-    return true;
-  }
-
-  return false;
-}
-
-function consumeStrengthOrVolumeNode(tokens, state, index) {
-  const strengthNode = buildStrengthNode(tokens, index);
-  if (!strengthNode) return null;
-
-  const unitFamily = UNIT_FAMILY_BY_VALUE.get(strengthNode.unit);
-  const isDoseCount = strengthNode.kind === 'simple' && strengthNode.unit === 'доз';
-  const isVolumeNode =
-    strengthNode.kind === 'simple' &&
-    (unitFamily === 'volume' || unitFamily === 'length' || isDoseCount);
-  if (isDoseCount) {
-    const perDoseStrength = inferMultiValuePerDoseStrength(strengthNode, state.strengthCandidates);
-    if (perDoseStrength) {
-      return applyCandidateRule(state, perDoseStrength, 'strength');
-    }
-  }
-
-  if (isVolumeNode) {
-    const measurementNode = buildMeasurementNodeFromStrength(strengthNode);
-    if (measurementNode) state.addVolume(measurementNode);
-  } else {
-    state.addStrength(strengthNode);
-  }
-
-  state.consumeRange(
-    strengthNode.startIndex,
-    strengthNode.endIndex,
-    isVolumeNode ? 'volume' : 'strength',
-  );
-  return strengthNode.endIndex;
-}
-
-function parseExplicitMeasurementsPass(tokens, state) {
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (state.hasConsumed(index)) continue;
-
-    const token = tokens[index];
-    if (token.type !== 'NUMBER') continue;
-
-    const dimensionVolume = buildDimensionVolumeNode(tokens, index);
-    if (dimensionVolume) {
-      index = applyCandidateRule(state, dimensionVolume, 'volume');
-      continue;
-    }
-
-    const ruleEndIndex = runCandidateRules(state, tokens, index);
-    if (ruleEndIndex != null) {
-      index = ruleEndIndex;
-      continue;
-    }
-
-    if (maybeConsumePackBeforeContainerOrForm(tokens, state, index)) continue;
-
-    const strengthEndIndex = consumeStrengthOrVolumeNode(tokens, state, index);
-    if (strengthEndIndex != null) index = strengthEndIndex;
-  }
-}
-
 function collectTradeNameEntries(tokens, state) {
   const tradeNameEntries = [];
   for (let index = 0; index < tokens.length; index += 1) {
@@ -537,64 +373,6 @@ function extractTradeNameResidue({ state, tokens, rawQuery, normalizedText }) {
   return { tradeNameTokens, vendorCountry, vendorCountryTokens };
 }
 
-function buildPublicMeasurements(state, normalizedText) {
-  let strengths = dedupePublicNodes(
-    state.strengthCandidates.map(toPublicStrengthNode).filter(Boolean),
-  );
-  strengths = fixOralSolidMlStrengthTypo(strengths, state.dosageForm);
-  strengths = mergeSameUnitSlashStrength(strengths, normalizedText);
-  strengths = inferCompactPlusSharedDenominatorRatios(strengths, normalizedText, state.dosageForm);
-  strengths = inferInhalationPerDoseStrengths(strengths, normalizedText, state.dosageForm);
-  let volumes = dedupePublicNodes(
-    state.volumeCandidates.map(toPublicMeasurementNode).filter(Boolean),
-  );
-  ({ strengths, volumes } = splitTopicalPackageMassRatios(strengths, volumes, state.dosageForm));
-  ({ strengths, volumes } = inferTopicalDoseUnitPerGramStrength(
-    strengths,
-    volumes,
-    state.dosageForm,
-  ));
-  ({ strengths, volumes } = inferDropsMassPackageRatio(strengths, volumes, state.dosageForm));
-  strengths = inferDropsMassPerMlStrengths(strengths, volumes, state.dosageForm);
-  strengths = inferLiquidPlusMlComponentTypo(strengths, state.dosageForm, normalizedText);
-  ({ strengths, volumes } = inferLiquidActivityUnitPackageRatio(
-    strengths,
-    volumes,
-    state.dosageForm,
-    normalizedText,
-  ));
-  ({ strengths, volumes } = inferMeteredDoseStrengths(strengths, volumes, state.dosageForm));
-  ({ strengths, volumes } = simplifyInhalationDoseRatios(strengths, volumes, state.dosageForm));
-  volumes = inferOralLiquidVolumeFromDoseCount(strengths, volumes, state.dosageForm);
-  volumes = dedupePublicNodes(volumes);
-  return { strengths, volumes };
-}
-
-function fixOralSolidMlStrengthTypo(strengths, dosageForm) {
-  if (!ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(dosageForm)) return strengths;
-
-  return strengths.map((strength) => {
-    if (
-      strength?.kind !== 'ratio' ||
-      strength.denominator?.unit !== 'мл' ||
-      strength.unit !== 'мг' ||
-      strength.value == null ||
-      strength.denominator.value == null
-    ) {
-      return strength;
-    }
-
-    const values = [strength.value, strength.denominator.value];
-    return {
-      kind: 'simple',
-      text: values.map((value) => `${value} мг`).join('/'),
-      values,
-      value: null,
-      unit: 'мг',
-    };
-  });
-}
-
 function stripPackMultipliersFromTradeName(fullTradeName, state, tokens) {
   if (!fullTradeName) return fullTradeName;
   let stripped = fullTradeName;
@@ -630,7 +408,7 @@ function assembleParsedQuery({
   vendorCountry,
   vendorCountryTokens,
 }) {
-  const { strengths, volumes } = buildPublicMeasurements(state, normalizedText);
+  const { strengths, volumes } = finalizePublicMeasurements(state, normalizedText);
   let dosageForm = state.dosageForm || null;
   let dosageFormToken = state.dosageFormToken?.normalizedValue || null;
   let dosageFormSource = state.dosageFormSource;
@@ -716,7 +494,7 @@ function parseMedicineQuery(rawQuery) {
   normalizeSizeContextTokens(tokens);
   const hasRawPackMultiplier = extractRawPackCounts(rawQuery, state);
   parsePackContainerAndFormPass(tokens, state, hasRawPackMultiplier);
-  parseExplicitMeasurementsPass(tokens, state);
+  parseExplicitMeasurementCandidates(tokens, state);
 
   normalizeExplicitMeasurementCandidates({ state, tokens, rawQuery, normalizedText });
   const residue = extractTradeNameResidue({ state, tokens, rawQuery, normalizedText });
