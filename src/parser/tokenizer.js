@@ -272,7 +272,6 @@ function tokenizeMedicineQuery(rawQuery) {
 }
 
 module.exports = {
-  classifyWordToken,
   tokenizeNormalizedQuery,
   tokenizeMedicineQuery,
   inferBareKapDosageForm,

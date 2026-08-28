@@ -31,6 +31,19 @@ test('F001 root package facade exports documented APIs', () => {
 });
 
 test('F002 package subpaths are require-able and expose APIs', () => {
+  assert.deepEqual(Object.keys(pkg.exports).sort(), [
+    '.',
+    './fuzzy-search',
+    './latin-to-cyrillic',
+    './lookup-profiles',
+    './medicine-dosage-forms',
+    './medicine-lookup-common',
+    './medicine-name-profile',
+    './parser',
+    './query-builder',
+    './vendor-country',
+  ].sort());
+
   for (const exportPath of Object.values(pkg.exports)) {
     assert.ok(Object.keys(require(`..${exportPath.slice(1)}`)).length, exportPath);
   }
