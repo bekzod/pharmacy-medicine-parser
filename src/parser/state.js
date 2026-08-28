@@ -88,8 +88,8 @@ class ParseState {
     this.packCount = value;
   }
 
-  setContainerType(value, { onlyIfEmpty = true } = {}) {
-    if (onlyIfEmpty && this.containerType) return;
+  setContainerType(value) {
+    if (this.containerType) return;
     this.containerType = value;
   }
 

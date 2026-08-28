@@ -31,14 +31,11 @@ function escapeLikePattern(value) {
   return String(value || '').replace(/[\\%_]/g, '\\$&');
 }
 
-function normalizeText(value, mode = 'sql') {
-  if (mode !== 'sql') throw new Error(`Unknown normalization mode: ${mode}`);
+function normalizeSqlTerm(value) {
   return String(value || '').toLowerCase().replace(/ё/g, 'е').trim();
 }
 
-function normalizeSqlTerm(value) {
-  return normalizeText(value);
-}
+const normalizeText = normalizeSqlTerm;
 
 const HOMOGLYPH_WORD_RE = /[\p{L}\p{N}]+(?:[.'\u2019-][\p{L}\p{N}]+)*/gu;
 

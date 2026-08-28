@@ -184,17 +184,7 @@ function collectStructuredDetails(name) {
   const tradeName = parseTradeName(rawName);
 
   if (!rawName) {
-    return {
-      trade_name: null,
-      container_type: null,
-      dosage_form: null,
-      product_type: null,
-      strength: null,
-      volume: null,
-      pack: null,
-      strengthTexts: [],
-      volumeTexts: [],
-    };
+    return buildBrandOnlyDetails({});
   }
 
   if (findDelimitedCommaIndex(rawName) === -1) {
