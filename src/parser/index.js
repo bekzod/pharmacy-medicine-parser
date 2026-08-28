@@ -1,6 +1,7 @@
 const {
   ORAL_SOLID_FORMS_WITH_IMPLICIT_MG,
   SIZE_CONTEXT_TOKENS,
+  SYRINGE_RE,
 } = require('./constants');
 const { normalizeMedicineQuery } = require('./normalization');
 const {
@@ -277,6 +278,7 @@ function assembleParsedQuery({
 
   const fullTradeName = stripPackMultipliersFromTradeName(normalizedText || null, state, tokens);
   const isCottonProduct = normalizedTradeNameTokens.includes('вата');
+  const isSyringeProduct = productType === 'device' && SYRINGE_RE.test(normalizedText);
   const baseFullTradeNameTokens =
     (tradeNameTokens.length && productType !== 'device') || !fullTradeName
       ? normalizedTradeNameTokens
@@ -300,7 +302,7 @@ function assembleParsedQuery({
       dosage_form_route: null,
       container_type: null,
       strengths: isCottonProduct ? strengths : [],
-      volumes: isCottonProduct ? volumes : [],
+      volumes: isCottonProduct || isSyringeProduct ? volumes : [],
     },
   };
 }

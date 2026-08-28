@@ -498,7 +498,51 @@ const deviceAndProductTypeCases = [
   product_type: 'device',
   trade_name_text: 'шприц-ns 20 мл',
   trade_name_tokens: [ 'шприц-ns', '20', 'мл' ],
+  volumes: [volume('20 мл', 20, 'мл')],
   pack_count: 1
+}],
+  ['parses generic single-use syringe capacity', 'Шприц, одно. прим. 10 мл', {
+  product_type: 'device',
+  trade_name_text: 'шприц 10 мл',
+  dosage_form: null,
+  volumes: [volume('10 мл', 10, 'мл')]
+}],
+  ['parses branded syringe capacity without promotional noise', 'шприц 5мл (Health) акция', {
+  product_type: 'device',
+  trade_name_text: 'шприц 5 мл health',
+  dosage_form: null,
+  volumes: [volume('5 мл', 5, 'мл')]
+}],
+  ['parses uppercase full single-use syringe wording', 'ШПРИЦ ОДНОРАЗОВОГО ПРИМЕНЕНИЯ 2МЛ', {
+  product_type: 'device',
+  trade_name_text: 'шприц 2 мл',
+  dosage_form: null,
+  volumes: [volume('2 мл', 2, 'мл')]
+}],
+  ['parses plural syringes with a Latin volume unit', 'шприцы одно. прим. 20 ml', {
+  product_type: 'device',
+  trade_name_text: 'шприцы 20 мл',
+  dosage_form: null,
+  volumes: [volume('20 мл', 20, 'мл')]
+}],
+  ['parses decimal syringe capacity with a brand', 'Шприц 0,5 мл (Health)', {
+  product_type: 'device',
+  trade_name_text: 'шприц 0.5 мл health',
+  dosage_form: null,
+  volumes: [volume('0.5 мл', 0.5, 'мл')]
+}],
+  ['drops uppercase promotional noise from branded syringes', 'шприц-NS 10 мл АКЦИЯ', {
+  product_type: 'device',
+  trade_name_text: 'шприц-ns 10 мл',
+  dosage_form: null,
+  volumes: [volume('10 мл', 10, 'мл')]
+}],
+  ['keeps syringe pens on the medicine injection path', 'Инсулин 100 МЕ/мл шприц-ручка 3 мл', {
+  product_type: 'medicine',
+  trade_name_text: 'инсулин',
+  dosage_form: 'injection',
+  strengths: [ratio('100 ме/мл', [100], 100, 'ме', { value: null, unit: 'мл' })],
+  volumes: [volume('3 мл', 3, 'мл')]
 }],
   ['keeps decimal syringe size tokens when brand tokens exist', 'Шприц однок. прим. KD-JECT III инсулин. 0.5мл U100', {
   product_type: 'device',
