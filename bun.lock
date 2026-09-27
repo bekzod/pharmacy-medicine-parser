@@ -1,0 +1,10 @@
+{
+  "lockfileVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "pharmacy-medicine-parser",
+      "version": "0.1.0"
+    }
+  },
+  "packages": {}
+}
