@@ -4,6 +4,7 @@
   "description": "Medicine query parser and PostgreSQL search query builder extracted from pharmacy-analytics.",
   "license": "MIT",
   "type": "commonjs",
+  "packageManager": "bun@1.4.2",
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",
