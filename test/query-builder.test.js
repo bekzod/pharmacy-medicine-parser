@@ -5,6 +5,21 @@ const {
   buildMedicineSearchQuery,
 } = require('../src');
 const { formatMeasurementNumber } = require('../src/parser/query-builder');
+const { extractMedicineDetails, buildQueryLookupProfiles } = require('../src/medicine-lookup-profiles');
+
+test('comma-delimited syringe capacity keeps decimal identity through catalog lookup', () => {
+  const query = 'Шприц, одно. прим., 10,5 мл';
+  const canonicalQuery = 'Шприц 10.5 мл';
+  assert.deepEqual(extractMedicineDetails(query), extractMedicineDetails(canonicalQuery));
+  assert.equal(extractMedicineDetails(query).trade_name, 'шприц 10.5 мл');
+
+  const [profile] = buildQueryLookupProfiles(query);
+  const search = buildMedicineSearchQuery(profile.parsed);
+  const canonicalSearch = buildMedicineSearchQuery(parseMedicineQuery(canonicalQuery));
+  assert.equal(profile.searchMode, 'brand_only');
+  assert.equal(search.replacements.tradeNameQuery, 'шприц 10.5 мл');
+  assert.deepEqual(search, canonicalSearch);
+});
 
 test('exports measurement formatter for lookup compatibility', () => {
   assert.equal(formatMeasurementNumber(2.5000001), '2.5');
