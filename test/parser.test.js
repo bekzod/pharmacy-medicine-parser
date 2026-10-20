@@ -507,6 +507,36 @@ const deviceAndProductTypeCases = [
   dosage_form: null,
   volumes: [volume('10 мл', 10, 'мл')]
 }],
+  ['parses comma-delimited single-use syringes with decimal capacity', 'Шприц, одно. прим., 10,5 мл', {
+  product_type: 'device',
+  trade_name_text: 'шприц 10.5 мл',
+  trade_name_tokens: ['шприц', '10.5', 'мл'],
+  dosage_form: null,
+  strengths: [],
+  volumes: [volume('10.5 мл', 10.5, 'мл')],
+  pack_count: null
+}],
+  ['parses single-use syringe needle dimensions separately from capacity', 'Шприц, одно. двухдетальный с иглой Луер, 0,8 х 38 мм 10 мл', {
+  product_type: 'device',
+  trade_name_text: 'шприц двухдетальный с иглой луер 0.8 мм х 38 мм 10 мл',
+  trade_name_tokens: ['шприц', 'двухдетальный', 'с', 'иглой', 'луер', '0.8', 'мм', 'х', '38', 'мм', '10', 'мл'],
+  dosage_form: null,
+  strengths: [],
+  volumes: [
+    volume('0.8 мм х 38 мм', 0.8, 'мм', { dimension2: { value: 38, unit: 'мм' } }),
+    volume('10 мл', 10, 'мл')
+  ],
+  pack_count: null
+}],
+  ['parses decimal needle dimensions with a shared trailing unit', 'Шприц 0,8×38,5 мм 10 мл №1', {
+  product_type: 'device',
+  trade_name_text: 'шприц 0.8 мм х 38.5 мм 10 мл',
+  volumes: [
+    volume('0.8 мм х 38.5 мм', 0.8, 'мм', { dimension2: { value: 38.5, unit: 'мм' } }),
+    volume('10 мл', 10, 'мл')
+  ],
+  pack_count: 1
+}],
   ['parses branded syringe capacity without promotional noise', 'шприц 5мл (Health) акция', {
   product_type: 'device',
   trade_name_text: 'шприц 5 мл health',
