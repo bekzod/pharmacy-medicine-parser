@@ -344,7 +344,7 @@ const DOSAGE_FORM_ROUTE_PATTERNS = [
   { route: 'infusion', pattern: /(?<![\p{L}])инфуз(?:и(?!ол)[а-я]*)?(?![\p{L}])/iu },
   // Negative lookahead must exclude "инф" (infusion) AND "инг" (inhalation)
   // so neither route gets misclassified as injection.
-  { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*и\\.?`, 'iu') },
+  { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*и\\.?(?![\\p{L}])`, 'iu') },
   { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*ин(?![фг])[а-я]*\\.?`, 'iu') },
   { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*в\\.?\\s*в\\.?`, 'iu') },
   { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*п\\s*\\/\\s*к`, 'iu') },
@@ -373,6 +373,8 @@ const ORAL_LIQUID_REFERENCE_VOLUME_ML = new Set([5, 10]);
 // (which forces dosage_form, strengths, and volumes to null).
 const NOT_LETTER_BEHIND = '(?<!\\p{L})';
 const stem = (pattern) => new RegExp(`${NOT_LETTER_BEHIND}${pattern}`, 'iu');
+
+const GAUZE_WORD_RE = /(?<!\p{L})марл(?:я|и|е|ю|ей|ёй|евый|евая|евое|евые|евыми|евых|евой|евою|евую|евом)(?!\p{L})/iu;
 
 const PRODUCT_TYPE_PATTERNS = {
   medicine: [
@@ -414,7 +416,7 @@ const PRODUCT_TYPE_PATTERNS = {
     stem('тампон[а-яё]*'),
     // Gauze: enumerate noun + adjective inflections instead of `марл[а-яё]+`
     // so trade names like "МАРЛИН" don't get classified as consumer goods.
-    /(?<!\p{L})марл(?:я|и|е|ю|ей|ёй|евый|евая|евое|евые|евыми|евых|евой|евою|евую|евом|евом)(?!\p{L})/iu,
+    GAUZE_WORD_RE,
     stem('пробирк[а-яё]*'),
     stem('предметное.стекло'),
     stem('покровное.стекло'),
@@ -436,7 +438,7 @@ const PRODUCT_TYPE_PATTERNS = {
     stem('пластыр[а-яё]*'),
     stem('вата'),
     stem('ватн[а-яё]*'),
-    stem('марл[а-яё]*'),
+    GAUZE_WORD_RE,
     stem('салфетк[а-яё]*'),
     stem('ланцет[а-яё]*'),
     stem('игл[а-я]*'),

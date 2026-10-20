@@ -207,7 +207,7 @@ function collectStructuredDetails(name) {
   }
 
   const segments = rawName
-    .split(/,(?!\d)/u)
+    .split(DELIMITED_COMMA_RE)
     .map((segment) => segment.trim())
     .filter(Boolean);
   const wholeQuery = parseMedicineQuery(rawName).attributes;

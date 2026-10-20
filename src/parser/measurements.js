@@ -618,7 +618,7 @@ function formatNormalizedNumber(value) {
   if (!Number.isFinite(numericValue)) return String(value || '');
   return Number.isInteger(numericValue)
     ? String(Math.trunc(numericValue))
-    : String(Number(numericValue.toFixed(6))).replace(/\.?0+$/u, '');
+    : String(Number(numericValue.toFixed(6)));
 }
 
 function buildSameUnitSlashStrength(normalizedText) {
@@ -875,7 +875,7 @@ function splitTopicalPackageMassRatios(strengths, volumes, dosageForm) {
 
     nextStrengths.push({
       ...strength,
-      text: `${formatNormalizedNumber(strength.value)} ${strength.unit}/г`,
+      text: `${strength.values.map(formatNormalizedNumber).join('/')} ${strength.unit}/г`,
       denominator: { value: null, unit: 'г' },
     });
     nextVolumes.push({
@@ -903,7 +903,8 @@ function inferTopicalDoseUnitPerGramStrength(strengths, volumes, dosageForm) {
       if (
         strength?.kind !== 'simple' ||
         !['ме', 'ед'].includes(strength.unit) ||
-        !Number.isFinite(Number(strength.value))
+        !strength.values?.length ||
+        !strength.values.every(Number.isFinite)
       ) {
         return strength;
       }
@@ -911,7 +912,7 @@ function inferTopicalDoseUnitPerGramStrength(strengths, volumes, dosageForm) {
       return {
         ...strength,
         kind: 'ratio',
-        text: `${formatNormalizedNumber(strength.value)} ${strength.unit}/г`,
+        text: `${strength.values.map(formatNormalizedNumber).join('/')} ${strength.unit}/г`,
         denominator: { value: null, unit: 'г' },
       };
     }),

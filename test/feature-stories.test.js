@@ -423,7 +423,7 @@ test('F052 strict strength filters use delimited matching and blank fallback', (
     requireParsedAttributeMatch: true,
     strictParsedAttributeFilters: true,
   });
-  assert.ok(searchQuery.sql.includes("LIKE :strengthFilter0_0 || '/%'"));
+  assert.ok(searchQuery.sql.includes("LIKE :strengthFilter0_0Like || '/%'"));
   assert.ok(searchQuery.sql.includes("OR lower(coalesce(m.strength, '')) = ''"));
 });
 

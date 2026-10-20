@@ -1177,7 +1177,7 @@ const measurementAndRouteCases = [
     replacementsEqual: { tradeNameQuery: 'гайнекс' },
     filterPrefix: 'strengthFilter',
     filterValuesInclude: ['500 мг'],
-    sqlIncludes: ["LIKE :strengthFilter0_0 || '/%'"]
+    sqlIncludes: ["LIKE :strengthFilter0_0Like || '/%'"]
   }
 }],
   ['parses slash aerosol dose count forms', 'Беклометазон аэр.250мкг/200 Бинно фарм', {

@@ -71,11 +71,11 @@ test('strict strength recall matches comma-delimited stored strength components'
     'expected strict strength recall to keep exact component matching',
   );
   assert.ok(
-    searchQuery.sql.includes(`${normalizedStrengthExpr} LIKE :strengthFilter0_0 || ',%'`),
+    searchQuery.sql.includes(`${normalizedStrengthExpr} LIKE :strengthFilter0_0Like || ',%'`),
     'expected strict strength recall to match the first component in comma-delimited strength',
   );
   assert.ok(
-    searchQuery.sql.includes(`${normalizedStrengthExpr} LIKE '%, ' || :strengthFilter0_0`),
+    searchQuery.sql.includes(`${normalizedStrengthExpr} LIKE '%, ' || :strengthFilter0_0Like`),
     'expected strict strength recall to match later comma-delimited strength components',
   );
   assert.ok(
@@ -255,4 +255,55 @@ test('strict pack-one recall admits null pack for metered sprays', () => {
     searchQuery.sql.includes('(m.pack = :packCount OR m.pack IS NULL)'),
     'expected pack-one metered sprays to admit null pack',
   );
+});
+
+test("strict compact combinations keep every component", () => {
+  const query = buildMedicineSearchQuery(parseMedicineQuery("Арлеверт 40/20мг №20"), {
+    requireParsedAttributeMatch: true, strictParsedAttributeFilters: true,
+  });
+  const values = Object.entries(query.replacements).filter(([key]) => key.startsWith("strengthFilter")).map(([, value]) => value);
+  assert.ok(values.includes("40 мг/20 мг"));
+  assert.ok(!values.includes("40 мг"));
+  assert.ok(!values.includes("20 мг"));
+});
+
+test("percentage filters and scoring escape LIKE values separately from equality", () => {
+  const query = buildMedicineSearchQuery(parseMedicineQuery("Тестовый 1%"), {
+    requireParsedAttributeMatch: true, strictParsedAttributeFilters: true,
+  });
+  assert.equal(query.replacements.strengthFilter0_0, "1%");
+  assert.equal(query.replacements.strengthFilter0_0Like, "1\\%");
+  assert.equal(query.replacements.strength0_0Like, "1\\%");
+  assert.ok(query.sql.includes("= :strengthFilter0_0 OR"));
+  assert.ok(query.sql.includes("LIKE :strengthFilter0_0Like ||"));
+});
+
+test("required attributes reject conflicting stored dosage forms while admitting omissions", () => {
+  const query = buildMedicineSearchQuery(parseMedicineQuery("Тестовый таб 500мг"), {
+    requireParsedAttributeMatch: true, strictParsedAttributeFilters: true,
+  });
+  assert.ok(query.sql.includes("(m.dosage_form = :dosageForm OR m.dosage_form IS NULL OR m.dosage_form = '')"));
+});
+
+test("candidate ranking scores strength before truncation", () => {
+  const query = buildMedicineSearchQuery(parseMedicineQuery("Тестовый таб 500мг"), { limit: 1 });
+  const firstOrder = query.sql.slice(query.sql.indexOf("ORDER BY"), query.sql.indexOf("LIMIT :candidateLimit"));
+  assert.ok(firstOrder.includes("strength0_0"));
+  assert.ok(firstOrder.includes("dosageForm"));
+});
+
+test("default candidate limit covers later pages", () => {
+  const query = buildMedicineSearchQuery(parseMedicineQuery("Тестовый"), { limit: 10, offset: 250 });
+  assert.ok(query.replacements.candidateLimit >= 260);
+});
+
+test('non-strict attribute and country filters use escaped LIKE parameters', () => {
+  const parsed = parseMedicineQuery('Тестовый 1% 20мл');
+  parsed.attributes.vendor_country_text = 'country_%';
+  const query = buildMedicineSearchQuery(parsed, { requireParsedAttributeMatch: true });
+  for (const prefix of ['strengthFilter', 'volumeFilter', 'vendorCountryFilter']) {
+    assert.ok(query.sql.includes(`LIKE '%' || :${prefix}0_0Like || '%'`));
+  }
+  assert.equal(query.replacements.strengthFilter0_0Like, '1\\%');
+  assert.equal(query.replacements.vendorCountryFilter0_0Like, 'country\\_\\%');
 });
