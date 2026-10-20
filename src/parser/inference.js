@@ -113,7 +113,7 @@ function maybeInferVitaminDStrength({ state, tradeNameTokens }) {
 
   if (strengthIndex == null) return;
 
-  addSingleTokenStrength(state, strengthIndex, 'ме');
+  addSingleTokenStrength(state, strengthIndex, 'ме', tradeNameTokens);
 
   if (
     state.packCount != null &&
@@ -172,7 +172,7 @@ function maybeInferEnzymeActivityStrength({ state, tradeNameTokens }) {
   });
   if (strengthIndex == null) return;
 
-  addSingleTokenStrength(state, strengthIndex, 'ед');
+  addSingleTokenStrength(state, strengthIndex, 'ед', tradeNameTokens);
 }
 
 // Oral solid forms (tablet, capsule, etc.) where pharmacy listings often
@@ -235,9 +235,16 @@ const ORAL_SOLID_STRENGTH_RULES = [
     tradeTokens: ORAL_SOLID_TRADES_WITH_IMPLICIT_G,
     requiresPackWithoutForm: true,
     min: 0.01,
-    max: 5000,
+    max: 1,
     unit: 'г',
     requireInteger: false,
+  },
+  {
+    tradeTokens: ORAL_SOLID_TRADES_WITH_IMPLICIT_G,
+    requiresPackWithoutForm: true,
+    min: 25,
+    max: 5000,
+    unit: 'мг',
   },
   {
     tradeTokens: ORAL_SOLID_TRADES_WITH_LOW_IMPLICIT_MG,
@@ -327,8 +334,10 @@ function addMissingMlVolume(state, strength, volumeValue) {
   });
 }
 
-function findOralSolidStrengthRule({ dosageForm, packCount, tradeNameTokens }) {
+function findOralSolidStrengthRule({ dosageForm, packCount, tradeNameTokens, value }) {
   return ORAL_SOLID_STRENGTH_RULES.find((rule) => {
+    if (value < rule.min || value > rule.max) return false;
+    if (rule.requireInteger !== false && !Number.isInteger(value)) return false;
     if (rule.tradeTokens && !tradeNameTokensInclude(tradeNameTokens, rule.tradeTokens)) return false;
     if (rule.formGuard && !rule.formGuard(dosageForm)) return false;
     if (dosageForm && !rule.formGuard && !ORAL_SOLID_FORMS_WITH_IMPLICIT_MG.has(dosageForm)) return false;
@@ -374,22 +383,21 @@ function maybeInferOralSolidStrength({ state, tradeNameTokens }) {
     }
   }
 
-  const rule = findOralSolidStrengthRule({
-    dosageForm,
-    packCount: state.packCount,
-    tradeNameTokens,
+  const candidateIndexes = tokens.flatMap((token, index) => {
+    if (state.hasConsumed(index) || token?.type !== 'NUMBER') return [];
+    if (!Number.isFinite(token.numericValue)) return [];
+    const rule = findOralSolidStrengthRule({
+      dosageForm,
+      packCount: state.packCount,
+      tradeNameTokens,
+      value: token.numericValue,
+    });
+    if (!rule) return [];
+    if (state.packCount === token.numericValue && !rule.allowPackMatch) return [];
+    return [{ index, rule }];
   });
-  if (!rule) return;
-
-  const strengthIndex = findSoleNumericCandidate(tokens, {
-    consumedIndexes: state.consumedIndexes,
-    packCount: state.packCount,
-    min: rule.min,
-    max: rule.max,
-    requireInteger: rule.requireInteger !== false,
-    allowPackCountMatch: rule.allowPackMatch === true,
-  });
-  if (strengthIndex == null) return;
+  if (candidateIndexes.length !== 1) return;
+  const { index: strengthIndex, rule } = candidateIndexes[0];
 
   // Trade-name tokens were collected from residue earlier — drop the just-
   // promoted strength value so it doesn't appear in both fields.
@@ -537,7 +545,7 @@ function maybeInferTrailingOralSolidPackCount({ state, tradeNameTokens }) {
   return tokens[packIndex].numericValue;
 }
 
-function maybeInferLiquidPackageVolume({ state }) {
+function maybeInferLiquidPackageVolume({ state, tradeNameTokens }) {
   const { tokens, dosageForm, volumeCandidates } = state;
   if (!LIQUID_FORMS_WITH_IMPLICIT_ML_VOLUME.has(dosageForm)) return;
   if (volumeCandidates.length > 0) return;
@@ -558,6 +566,7 @@ function maybeInferLiquidPackageVolume({ state }) {
     ),
   );
   state.consume(volumeIndex, 'volume');
+  dropPromotedTradeNameValues(tradeNameTokens, [tokens[volumeIndex].value]);
 }
 
 function maybeInferPowderGramStrength({ state, tradeNameTokens }) {
@@ -1106,7 +1115,7 @@ function inferImplicitMedicineAttributes({
   maybeInferRatioDenominatorPackageVolume({ state, tradeNameTokens });
   maybeInferPackageDenominatorPerMlTypo({ state, tradeNameTokens });
   fixSolutionPerGramDenominatorTypo({ state, tradeNameTokens });
-  maybeInferLiquidPackageVolume({ state });
+  maybeInferLiquidPackageVolume({ state, tradeNameTokens });
 
   if (
     state.packCount == null &&

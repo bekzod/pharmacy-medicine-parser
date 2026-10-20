@@ -58,6 +58,7 @@ function buildCandidateLimit(limit, offset) {
   const requestedRows = Math.max(Number(limit) || 0, 1) + Math.max(Number(offset) || 0, 0);
   if (requestedRows <= 1) return BRAND_CANDIDATE_LIMIT_SINGLE;
   return Math.max(
+    requestedRows,
     BRAND_CANDIDATE_LIMIT_MIN,
     Math.min(requestedRows * BRAND_CANDIDATE_LIMIT_MULTIPLIER, BRAND_CANDIDATE_LIMIT_MAX),
   );
@@ -163,7 +164,7 @@ function buildDelimitedAnyPredicates(expressions, keys) {
   return expressions.flatMap((expression) =>
     keys.map(
       (key) =>
-        `(${expression} = :${key} OR ${expression} LIKE :${key} || ',%' ESCAPE '\\' OR ${expression} LIKE '%, ' || :${key} ESCAPE '\\' OR ${expression} LIKE '%, ' || :${key} || ',%' ESCAPE '\\' OR ${expression} LIKE :${key} || '/%' ESCAPE '\\' OR ${expression} LIKE '%/' || :${key} ESCAPE '\\')`,
+        `(${expression} = :${key} OR ${expression} LIKE :${key}Like || ',%' ESCAPE '\\' OR ${expression} LIKE '%, ' || :${key}Like ESCAPE '\\' OR ${expression} LIKE '%, ' || :${key}Like || ',%' ESCAPE '\\' OR ${expression} LIKE :${key}Like || '/%' ESCAPE '\\' OR ${expression} LIKE '%/' || :${key}Like ESCAPE '\\')`,
     ),
   );
 }
@@ -185,6 +186,7 @@ function appendReplacementsWithVariantsGrouped(
     variantBuilder(value).forEach((variant, variantIndex) => {
       const key = `${prefix}${valueIndex}_${variantIndex}`;
       replacements[key] = variant;
+      replacements[`${key}Like`] = escapeLikePattern(variant);
       keys.push(key);
     });
     if (keys.length) groups.push(keys);
@@ -200,7 +202,7 @@ function buildAttributeScoreExpression(attributeExpr, replacements, prefix, valu
   const perValueExprs = groups.map((keys) => {
     const parts = keys.flatMap((key) => [
       `CASE WHEN ${attributeExpr} = :${key} THEN 1 ELSE 0 END`,
-      `CASE WHEN ${attributeExpr} LIKE '%' || :${key} || '%' ESCAPE '\\' THEN 0.9 ELSE 0 END`,
+      `CASE WHEN ${attributeExpr} LIKE '%' || :${key}Like || '%' ESCAPE '\\' THEN 0.9 ELSE 0 END`,
     ]);
     return `GREATEST(${parts.join(', ')})`;
   });
@@ -282,7 +284,7 @@ function buildStrengthSearchTextsWithPolicy(strengths, volumes = [], { strict = 
   for (const strength of validStrengths) {
     values.add(strength.text);
     addDoseUnitAliasStrengthTexts(values, strength);
-    addSameUnitMultiValueStrengthTexts(values, strength);
+    addSameUnitMultiValueStrengthTexts(values, strength, { strict });
     if (strict) addRatioEquivalentStrengthTexts(values, strength, volumes);
     addPercentEquivalentStrengthTexts(values, strength, volumes);
 
@@ -355,7 +357,7 @@ function addSameUnitComponentTextVariants(
   }
 }
 
-function addSameUnitMultiValueStrengthTexts(values, strength) {
+function addSameUnitMultiValueStrengthTexts(values, strength, { strict }) {
   if (strength?.kind !== 'simple' || !strength.unit) return;
 
   const numericValues = Array.isArray(strength.values)
@@ -363,7 +365,9 @@ function addSameUnitMultiValueStrengthTexts(values, strength) {
     : [];
   if (numericValues.length < 2 || numericValues.length !== strength.values.length) return;
 
-  addSameUnitComponentTextVariants(values, numericValues, strength.unit);
+  addSameUnitComponentTextVariants(values, numericValues, strength.unit, {
+    includeStandaloneComponents: !strict,
+  });
 }
 
 function normalizeRatioStrengthComponents(strength) {
@@ -498,13 +502,14 @@ function buildSimilarityExpression(columnExpr, includeTrigram) {
   return `GREATEST(${parts.join(', ')})`;
 }
 
-function buildCandidateIdBranches(candidateBaseConditions, candidatePredicates) {
+function buildCandidateIdBranches(candidateBaseConditions, candidatePredicates, candidateOrderExpression) {
   return candidatePredicates
     .map(
       (predicate, index) => `SELECT id FROM (
         SELECT m.id
         FROM medicines m
         WHERE ${[...candidateBaseConditions, predicate].join('\n          AND ')}
+        ORDER BY ${candidateOrderExpression} DESC, m.trade_name ASC, m.id ASC
         LIMIT :candidateLimit
       ) candidate_id_branch_${index}`,
     )
@@ -650,9 +655,6 @@ function buildScoreExpression(context) {
   const nameSimilarityExpression = brandOnlySearch
     ? `(${buildSimilarityExpression(normalizedNameExpr, includeTrigram)}) * 0.82`
     : null;
-  const candidateOrderExpression = brandOnlySearch
-    ? `GREATEST(${tradeNameSimilarityExpression}, coalesce(${nameSimilarityExpression}, 0))`
-    : tradeNameSimilarityExpression;
   const scoreParts = [...TRADE_NAME_SCORE_PARTS[searchMode]];
   scoreParts.push(`CASE WHEN ${normalizedTradeNameExpr} = :tradeNameQuery THEN 0.05 ELSE 0 END`);
 
@@ -731,7 +733,10 @@ function buildScoreExpression(context) {
   }
 
   return {
-    candidateOrderExpression,
+    candidateOrderExpression: scoreParts.join(' + ')
+      .replace(/\btrade_name_score\b/gu, `(${tradeNameSimilarityExpression})`)
+      .replace(/\bname_score\b/gu, `(${nameSimilarityExpression})`)
+      .replace(/m\.normalized_vendor_country/gu, context.normalizedVendorCountryExpr),
     nameSimilarityExpression,
     scoreExpression: scoreParts.join(' + '),
     hasParsedPackCount,
@@ -770,7 +775,7 @@ function buildCandidateConditions(context) {
       [attributes.vendor_country_text],
       (value) => [normalizeSqlTerm(value)],
     );
-    candidateBaseConditions.push(buildLikeAnyCondition([normalizedVendorCountryExpr], vendorCountryKeys));
+    candidateBaseConditions.push(buildLikeAnyCondition([normalizedVendorCountryExpr], vendorCountryKeys.map((key) => `${key}Like`)));
   }
   if (structuredSearch && attributes.product_type) {
     candidateBaseConditions.push(
@@ -778,6 +783,10 @@ function buildCandidateConditions(context) {
         ? "(m.product_type = :productType OR m.product_type = 'device' OR m.product_type IS NULL)"
         : '(m.product_type = :productType OR m.product_type IS NULL)',
     );
+  }
+  if (requireParsedAttributeMatch && attributes.dosage_form) {
+    replacements.dosageForm = attributes.dosage_form;
+    candidateBaseConditions.push("(m.dosage_form = :dosageForm OR m.dosage_form IS NULL OR m.dosage_form = '')");
   }
   const hasParsedVolume = (attributes.volumes || []).length > 0;
   const hasParsedStandaloneMass =
@@ -809,7 +818,7 @@ function buildCandidateConditions(context) {
           buildDelimitedAnyCondition([normalizedStrengthExpr], strengthFilterKeys),
           buildExactAnyCondition([normalizedVolumeExpr], strengthFilterKeys),
         ].join(' OR ')})`
-      : buildLikeAnyCondition([normalizedAttributeOrNameExpr], strengthFilterKeys);
+      : buildLikeAnyCondition([normalizedAttributeOrNameExpr], strengthFilterKeys.map((key) => `${key}Like`));
     // A candidate with no stored strength cannot contradict the parsed strength (omission is
     // not a mismatch), so admit it and let scoring rank it — otherwise an exact-name match with
     // a NULL/blank strength (e.g. a trade name stored without dosage) is dropped from recall in
@@ -824,7 +833,7 @@ function buildCandidateConditions(context) {
     );
     const volumeFilterCondition = strictParsedAttributeFilters
       ? buildDelimitedAnyCondition([normalizedVolumeExpr], volumeFilterKeys)
-      : buildLikeAnyCondition([normalizedAttributeOrNameExpr], volumeFilterKeys);
+      : buildLikeAnyCondition([normalizedAttributeOrNameExpr], volumeFilterKeys.map((key) => `${key}Like`));
     candidateBaseConditions.push(`(${volumeFilterCondition} OR ${normalizedVolumeExpr} = '')`);
   }
   if (vendorIds.length === 1) {
@@ -862,7 +871,7 @@ function renderMedicineSearchSql(context) {
   const useUnionCandidateIds = brandOnlySearch && !needsVendorCountryJoin && candidatePredicates.length > 1;
   const candidateCteSql = useUnionCandidateIds
     ? `candidate_ids AS MATERIALIZED (
-      ${buildCandidateIdBranches(candidateBaseConditions, candidatePredicates)}
+      ${buildCandidateIdBranches(candidateBaseConditions, candidatePredicates, candidateOrderExpression)}
     ),
     candidates AS MATERIALIZED (
       SELECT
