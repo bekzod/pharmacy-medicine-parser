@@ -1,7 +1,5 @@
 const { normalizeMedicineLanguage } = require('../medicine-language');
-const {
-  MEDICINE_FORM_NORMALIZERS,
-} = require('../medicine-dosage-forms');
+const { MEDICINE_FORM_NORMALIZERS } = require('../medicine-dosage-forms');
 const {
   MEDICINE_FORM_TOKENS,
   MEDICINE_UNIT_TOKENS,
@@ -26,10 +24,7 @@ const MEDICINE_QUERY_FINAL_REWRITES = [
     /(?<![\p{L}\d])(\d{1,2}(?:\s+\d{3})+)\s+(мкг|мг|мл|кг|г|л|ме|ед)(?![\p{L}\d])/giu,
     (match, value, unit) => `${value.replace(/\s+/gu, '')} ${unit}`,
   ],
-  [
-    /(\d+(?:\.\d+)?)\s+([\p{L}%]+)\s+\/\s+(\d+(?:\.\d+)?)\s+([\p{L}%]+)/gu,
-    '$1 $2/$3 $4',
-  ],
+  [/(\d+(?:\.\d+)?)\s+([\p{L}%]+)\s+\/\s+(\d+(?:\.\d+)?)\s+([\p{L}%]+)/gu, '$1 $2/$3 $4'],
   [/(\d+(?:\.\d+)?)\s+([\p{L}%]+)\s+\/\s+([\p{L}%]+)/gu, '$1 $2/$3'],
   [/\s+/gu, ' '],
 ];
@@ -42,7 +37,9 @@ function applyRewriteRules(value, rules) {
 }
 
 function normalizeTradeNameAbbrevToken(token) {
-  const normalized = String(token || '').toLowerCase().replace(/ё/g, 'е');
+  const normalized = String(token || '')
+    .toLowerCase()
+    .replace(/ё/g, 'е');
   return TRADE_NAME_ABBREV_TOKEN_ALIASES.get(normalized) || normalized;
 }
 
@@ -201,13 +198,13 @@ function normalizeMedicineQuery(rawQuery) {
       ' ',
     )
     .replace(/(\d)\s*,\s*(\d)/gu, '$1.$2')
-    .replace(/(\d+(?:\.\d+)?)\s*млн\.?\s*(ме|ед|iu)(?!\p{L})/giu, (_, value, unit) => `${Number(value) * 1000000} ${unit}`)
+    .replace(
+      /(\d+(?:\.\d+)?)\s*млн\.?\s*(ме|ед|iu)(?!\p{L})/giu,
+      (_, value, unit) => `${Number(value) * 1000000} ${unit}`,
+    )
     .replace(/(?<=\d)['’](?=\d{3}(?!\d))/gu, '')
     .replace(/(\d+(?:\.\d+)?(?:мкг|мг|мл|кг|г|л|ме|ед))_(?=\d)/giu, '$1/')
-    .replace(
-      /(\d+(?:\.\d+)?)(мкг|мг|г)\s*\/\s*(\d+(?:\.\d+)?)\2\s+\3\s*мл/giu,
-      '$1$2/$3мл',
-    )
+    .replace(/(\d+(?:\.\d+)?)(мкг|мг|г)\s*\/\s*(\d+(?:\.\d+)?)\2\s+\3\s*мл/giu, '$1$2/$3мл')
     .replace(/(\d+(?:\.\d+)?)(мкг|мг|мл|кг|г|л|ме|ед|%)\s*\/\s*№(?=\s*\d)/giu, '$1 $2 №')
     .replace(/(\d+(?:\.\d+)?)(мкг|мг)\s*\/\s*(?:д|доз)(?![\p{L}\d])/giu, '$1 $2/доз')
     .replace(
@@ -223,7 +220,10 @@ function normalizeMedicineQuery(rawQuery) {
     .replace(/(\d)(мкг|мг|мл|кг|г|л|ме|ед)\s*\/\s+(?=\d)/giu, '$1$2/')
     .replace(/%[./]?(?=\d)/gu, '% ')
     .replace(/(мкг|мг|мл|кг|г|л|%)-(?=\d)/giu, '$1 ')
-    .replace(/(?<![\p{L}\d])\d+\s*[*х×x]\s*(\d+(?:\.\d+)?)(мкг|мг|г|ме|ед)(?![\p{L}\d])/giu, '$1 $2')
+    .replace(
+      /(?<![\p{L}\d])\d+\s*[*х×x]\s*(\d+(?:\.\d+)?)(мкг|мг|г|ме|ед)(?![\p{L}\d])/giu,
+      '$1 $2',
+    )
     .replace(/(\d)\s*[х×x]\s*(\d)/gu, '$1x$2')
     .replace(/(\d+(?:\.\d+)?)\s*[*х×x]\s*(\d+(?:\.\d+)?)\s*(мм|см|м)(?!\p{L})/giu, '$1 $3 х $2 $3')
     .replace(/(?<![\p{L}\d])(\d{1,2})\s*g(?![\p{L}\d])/giu, '$1 g')
@@ -295,11 +295,7 @@ function normalizeMedicineQuery(rawQuery) {
 
   if (!prepared) return '';
 
-  const tokenized = prepared
-    .split(' ')
-    .map(normalizeRawSegment)
-    .filter(Boolean)
-    .join(' ');
+  const tokenized = prepared.split(' ').map(normalizeRawSegment).filter(Boolean).join(' ');
   return applyRewriteRules(tokenized, MEDICINE_QUERY_FINAL_REWRITES).trim();
 }
 

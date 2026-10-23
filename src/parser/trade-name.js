@@ -66,19 +66,12 @@ function normalizeCottonTradeTokens(tokens) {
       return token;
     })
     .filter((token) => token !== 'мед' && token !== 'гигиеническая');
-  if (
-    filtered.includes('гигр') ||
-    (!filtered.includes('стер') && !filtered.includes('нестер'))
-  ) {
+  if (filtered.includes('гигр') || (!filtered.includes('стер') && !filtered.includes('нестер'))) {
     return filtered;
   }
 
   const cottonIndex = filtered.indexOf('вата');
-  return [
-    ...filtered.slice(0, cottonIndex + 1),
-    'гигр',
-    ...filtered.slice(cottonIndex + 1),
-  ];
+  return [...filtered.slice(0, cottonIndex + 1), 'гигр', ...filtered.slice(cottonIndex + 1)];
 }
 
 function normalizeWetWipesTradeTokens(tokens) {
@@ -134,10 +127,7 @@ function buildTradeIdentityTokens(tradeNameEntries, state) {
     if (entry.isTradeName) {
       tokens.push(entry.value);
       state.setRole(entry.index, 'trade_name');
-    } else if (
-      tradeNameIndexes.has(entry.index - 1) ||
-      tradeNameIndexes.has(entry.index + 1)
-    ) {
+    } else if (tradeNameIndexes.has(entry.index - 1) || tradeNameIndexes.has(entry.index + 1)) {
       tokens.push(entry.value);
       state.setRole(entry.index, 'trade_name');
     }
@@ -162,10 +152,7 @@ function removableAnnotationTokens(annotationNoiseTokens, tradeIdentityTokens) {
 }
 
 function addCottonSterilityToken(tokens, normalizedText) {
-  if (
-    !tokens.includes('вата') ||
-    tokens.some((token) => /^стер|^нестер/u.test(token))
-  ) {
+  if (!tokens.includes('вата') || tokens.some((token) => /^стер|^нестер/u.test(token))) {
     return;
   }
   if (/(?<![а-яёa-z0-9])нестерильн[а-яё.]*(?![а-яёa-z0-9])/iu.test(normalizedText)) {
@@ -197,9 +184,7 @@ function clearRemovedTradeNameRoles(state, tokens, removedTokens) {
 }
 
 function dedupeMixedScriptTokens(tokens) {
-  const cyrillicTokenSet = new Set(
-    tokens.filter((token) => /[\u0400-\u04ff]/u.test(token)),
-  );
+  const cyrillicTokenSet = new Set(tokens.filter((token) => /[\u0400-\u04ff]/u.test(token)));
   return tokens.filter((token) => {
     if (/[\u0400-\u04ff]/u.test(token)) return true;
     return !cyrillicTokenSet.has(transliterateLatinToCyrillic(token));
@@ -224,18 +209,12 @@ function extractTradeIdentity({ state, tokens, rawQuery, normalizedText }) {
     ? remainingTokens.filter((token) => !removedAnnotationTokens.has(token))
     : remainingTokens;
 
-  filteredTokens = filterOphthalmicSolutionDescriptorTokens(
-    filteredTokens,
-    state,
-    normalizedText,
-  );
+  filteredTokens = filterOphthalmicSolutionDescriptorTokens(filteredTokens, state, normalizedText);
   addCottonSterilityToken(filteredTokens, normalizedText);
   clearRemovedTradeNameRoles(state, tokens, removedAnnotationTokens);
 
   const tradeNameTokens = normalizeWetWipesTradeTokens(
-    normalizeCottonTradeTokens(
-      normalizeTradeNameTokens(dedupeMixedScriptTokens(filteredTokens)),
-    ),
+    normalizeCottonTradeTokens(normalizeTradeNameTokens(dedupeMixedScriptTokens(filteredTokens))),
   );
   return { tradeNameTokens, vendorCountry, vendorCountryTokens };
 }

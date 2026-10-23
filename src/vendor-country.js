@@ -102,15 +102,7 @@ const COUNTRY_ALIAS_GROUPS = [
     'соединенные штаты америки',
     'аксш',
   ],
-  [
-    'россия',
-    'russia',
-    'rf',
-    'рф',
-    'российская федерация',
-    'россия федерацияси',
-    'русия',
-  ],
+  ['россия', 'russia', 'rf', 'рф', 'российская федерация', 'россия федерацияси', 'русия'],
   ['турция', 'turkey', 'туркия'],
   ['германия', 'germany', 'олмония'],
   ['франция', 'france', 'фаронса'],
@@ -190,19 +182,21 @@ function getVendorCountrySearchTerms(value) {
   const canonical = normalizeVendorCountry(value);
   if (!canonical) return [];
 
-  return [...new Set([
-    canonical,
-    ...[...COUNTRY_ALIAS_TO_CANONICAL.entries()]
-      .filter(([, aliasCanonical]) => aliasCanonical === canonical)
-      .map(([alias]) => alias),
-  ].filter(Boolean))];
+  return [
+    ...new Set(
+      [
+        canonical,
+        ...[...COUNTRY_ALIAS_TO_CANONICAL.entries()]
+          .filter(([, aliasCanonical]) => aliasCanonical === canonical)
+          .map(([alias]) => alias),
+      ].filter(Boolean),
+    ),
+  ];
 }
 
 function extractVendorCountryFromTokens(tokens) {
   const values = Array.isArray(tokens)
-    ? tokens
-        .map((token) => normalizeSqlTerm(token))
-        .filter(Boolean)
+    ? tokens.map((token) => normalizeSqlTerm(token)).filter(Boolean)
     : [];
   if (!values.length) {
     return { canonical: null, text: null, matchedTokens: [], remainingTokens: [] };

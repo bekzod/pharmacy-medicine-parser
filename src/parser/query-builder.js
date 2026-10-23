@@ -153,10 +153,11 @@ function addPercentEquivalentStrengthTexts(values, strength, volumes = []) {
   if (!Number.isFinite(percent)) return;
   const concentration = formatMeasurementNumber(percent * 10);
   if (!concentration) return;
-  const denominator = hasPackageUnit(volumes, PERCENT_MASS_PACKAGE_UNITS) &&
+  const denominator =
+    hasPackageUnit(volumes, PERCENT_MASS_PACKAGE_UNITS) &&
     !hasPackageUnit(volumes, PERCENT_VOLUME_PACKAGE_UNITS)
-    ? 'г'
-    : 'мл';
+      ? 'г'
+      : 'мл';
   values.add(`${concentration} мг/${denominator}`);
 }
 
@@ -377,25 +378,27 @@ function normalizeRatioStrengthComponents(strength) {
     .map(Number)
     .filter((value) => Number.isFinite(value));
 
-  return values.map((value) => {
-    const numerator = normalizeMeasurementValue(value, strength.unit);
-    const denominator = normalizeMeasurementValue(
-      strength.denominator?.value == null ? 1 : strength.denominator.value,
-      strength.denominator?.unit,
-    );
-    if (!numerator || !denominator || denominator.value <= 0) return null;
-    const numeratorText = formatMeasurementNumber(numerator.value);
-    const denominatorText = formatMeasurementNumber(denominator.value);
-    if (!numeratorText || !denominatorText) return null;
+  return values
+    .map((value) => {
+      const numerator = normalizeMeasurementValue(value, strength.unit);
+      const denominator = normalizeMeasurementValue(
+        strength.denominator?.value == null ? 1 : strength.denominator.value,
+        strength.denominator?.unit,
+      );
+      if (!numerator || !denominator || denominator.value <= 0) return null;
+      const numeratorText = formatMeasurementNumber(numerator.value);
+      const denominatorText = formatMeasurementNumber(denominator.value);
+      if (!numeratorText || !denominatorText) return null;
 
-    return {
-      key: `${numerator.unit}/${denominatorText} ${denominator.unit}`,
-      text:
-        denominator.value === 1
-          ? `${numeratorText} ${numerator.unit}/${denominator.unit}`
-          : `${numeratorText} ${numerator.unit}/${denominatorText} ${denominator.unit}`,
-    };
-  }).filter(Boolean);
+      return {
+        key: `${numerator.unit}/${denominatorText} ${denominator.unit}`,
+        text:
+          denominator.value === 1
+            ? `${numeratorText} ${numerator.unit}/${denominator.unit}`
+            : `${numeratorText} ${numerator.unit}/${denominatorText} ${denominator.unit}`,
+      };
+    })
+    .filter(Boolean);
 }
 
 function addSameDenominatorRatioStrengthTexts(values, strengths) {
@@ -430,8 +433,10 @@ function unitValuesMatch(left, right) {
   const rightValue = Number(right.value);
   if (!Number.isFinite(leftValue) || !Number.isFinite(rightValue)) return false;
   if (!left.unit || !right.unit) return false;
-  return String(left.unit).toLowerCase() === String(right.unit).toLowerCase() &&
-    Math.abs(leftValue - rightValue) < 0.000001;
+  return (
+    String(left.unit).toLowerCase() === String(right.unit).toLowerCase() &&
+    Math.abs(leftValue - rightValue) < 0.000001
+  );
 }
 
 function buildStrictVolumeSearchTexts(volumes, strengths) {
@@ -457,10 +462,10 @@ function buildStrictVolumeSearchTexts(volumes, strengths) {
 function allowsDeviceStoredProductTypeFallback(attributes) {
   return Boolean(
     attributes?.product_type === 'medicine' &&
-      ['injection', 'suspension'].includes(attributes?.dosage_form) &&
-      (attributes?.volumes || []).length &&
-      Number.isInteger(attributes?.pack_count) &&
-      attributes.pack_count > 0,
+    ['injection', 'suspension'].includes(attributes?.dosage_form) &&
+    (attributes?.volumes || []).length &&
+    Number.isInteger(attributes?.pack_count) &&
+    attributes.pack_count > 0,
   );
 }
 
@@ -502,7 +507,11 @@ function buildSimilarityExpression(columnExpr, includeTrigram) {
   return `GREATEST(${parts.join(', ')})`;
 }
 
-function buildCandidateIdBranches(candidateBaseConditions, candidatePredicates, candidateOrderExpression) {
+function buildCandidateIdBranches(
+  candidateBaseConditions,
+  candidatePredicates,
+  candidateOrderExpression,
+) {
   return candidatePredicates
     .map(
       (predicate, index) => `SELECT id FROM (
@@ -520,7 +529,8 @@ function deriveSearchText(parsedQuery, options = {}) {
   const { attributes } = parsedQuery || {};
   if (!attributes?.trade_name_tokens?.length) return null;
   const searchMode =
-    options.searchMode || (isBrandOnlyProductType(attributes.product_type) ? 'brand_only' : 'structured');
+    options.searchMode ||
+    (isBrandOnlyProductType(attributes.product_type) ? 'brand_only' : 'structured');
   const brandOnlySearch = searchMode === 'brand_only';
   const structuredSearch = searchMode === 'structured';
   const includeTrigram = options.includeTrigram !== false;
@@ -531,9 +541,7 @@ function deriveSearchText(parsedQuery, options = {}) {
   const limit = Number.isFinite(options.limit) ? Math.max(options.limit, 1) : 10;
   const offset = Number.isFinite(options.offset) ? Math.max(options.offset, 0) : 0;
   const vendorIds = Array.isArray(options.vendorIds)
-    ? options.vendorIds
-        .map((id) => (id == null ? null : String(id).trim()))
-        .filter(Boolean)
+    ? options.vendorIds.map((id) => (id == null ? null : String(id).trim())).filter(Boolean)
     : [];
   const candidateLimit = Number.isFinite(options.candidateLimit)
     ? Math.max(Math.trunc(options.candidateLimit), limit + offset, 1)
@@ -615,11 +623,7 @@ function buildCandidatePredicates(context) {
     }
   }
   const tradeNameTokenKeys = tradeNameTokenSearchTexts.length
-    ? appendReplacementsWithVariants(
-        replacements,
-        'tradeNameToken',
-        tradeNameTokenSearchTexts,
-      )
+    ? appendReplacementsWithVariants(replacements, 'tradeNameToken', tradeNameTokenSearchTexts)
     : [];
   if (tradeNameTokenSearchTexts.length) {
     tradeNameCandidatePredicates.push(
@@ -651,7 +655,10 @@ function buildScoreExpression(context) {
     structuredSearch,
     tradeNameTokenKeys,
   } = context;
-  const tradeNameSimilarityExpression = buildSimilarityExpression(normalizedTradeNameExpr, includeTrigram);
+  const tradeNameSimilarityExpression = buildSimilarityExpression(
+    normalizedTradeNameExpr,
+    includeTrigram,
+  );
   const nameSimilarityExpression = brandOnlySearch
     ? `(${buildSimilarityExpression(normalizedNameExpr, includeTrigram)}) * 0.82`
     : null;
@@ -723,8 +730,7 @@ function buildScoreExpression(context) {
     scoreParts.push(`(${vendorCountryScoreExpression}) * 0.06`);
   }
 
-  const hasParsedPackCount =
-    Number.isInteger(attributes.pack_count) && attributes.pack_count > 0;
+  const hasParsedPackCount = Number.isInteger(attributes.pack_count) && attributes.pack_count > 0;
   if (hasParsedPackCount) {
     replacements.packCount = attributes.pack_count;
     if (structuredSearch) {
@@ -733,7 +739,8 @@ function buildScoreExpression(context) {
   }
 
   return {
-    candidateOrderExpression: scoreParts.join(' + ')
+    candidateOrderExpression: scoreParts
+      .join(' + ')
       .replace(/\btrade_name_score\b/gu, `(${tradeNameSimilarityExpression})`)
       .replace(/\bname_score\b/gu, `(${nameSimilarityExpression})`)
       .replace(/m\.normalized_vendor_country/gu, context.normalizedVendorCountryExpr),
@@ -766,7 +773,9 @@ function buildCandidateConditions(context) {
     volumeSearchTexts,
   } = context;
   const candidateBaseConditions = [
-    brandOnlySearch ? '(m.trade_name IS NOT NULL OR m.name IS NOT NULL)' : 'm.trade_name IS NOT NULL',
+    brandOnlySearch
+      ? '(m.trade_name IS NOT NULL OR m.name IS NOT NULL)'
+      : 'm.trade_name IS NOT NULL',
   ];
   if (needsVendorCountryJoin) {
     const vendorCountryKeys = appendReplacementsWithVariants(
@@ -775,7 +784,12 @@ function buildCandidateConditions(context) {
       [attributes.vendor_country_text],
       (value) => [normalizeSqlTerm(value)],
     );
-    candidateBaseConditions.push(buildLikeAnyCondition([normalizedVendorCountryExpr], vendorCountryKeys.map((key) => `${key}Like`)));
+    candidateBaseConditions.push(
+      buildLikeAnyCondition(
+        [normalizedVendorCountryExpr],
+        vendorCountryKeys.map((key) => `${key}Like`),
+      ),
+    );
   }
   if (structuredSearch && attributes.product_type) {
     candidateBaseConditions.push(
@@ -786,7 +800,9 @@ function buildCandidateConditions(context) {
   }
   if (requireParsedAttributeMatch && attributes.dosage_form) {
     replacements.dosageForm = attributes.dosage_form;
-    candidateBaseConditions.push("(m.dosage_form = :dosageForm OR m.dosage_form IS NULL OR m.dosage_form = '')");
+    candidateBaseConditions.push(
+      "(m.dosage_form = :dosageForm OR m.dosage_form IS NULL OR m.dosage_form = '')",
+    );
   }
   const hasParsedVolume = (attributes.volumes || []).length > 0;
   const hasParsedStandaloneMass =
@@ -818,7 +834,10 @@ function buildCandidateConditions(context) {
           buildDelimitedAnyCondition([normalizedStrengthExpr], strengthFilterKeys),
           buildExactAnyCondition([normalizedVolumeExpr], strengthFilterKeys),
         ].join(' OR ')})`
-      : buildLikeAnyCondition([normalizedAttributeOrNameExpr], strengthFilterKeys.map((key) => `${key}Like`));
+      : buildLikeAnyCondition(
+          [normalizedAttributeOrNameExpr],
+          strengthFilterKeys.map((key) => `${key}Like`),
+        );
     // A candidate with no stored strength cannot contradict the parsed strength (omission is
     // not a mismatch), so admit it and let scoring rank it — otherwise an exact-name match with
     // a NULL/blank strength (e.g. a trade name stored without dosage) is dropped from recall in
@@ -833,7 +852,10 @@ function buildCandidateConditions(context) {
     );
     const volumeFilterCondition = strictParsedAttributeFilters
       ? buildDelimitedAnyCondition([normalizedVolumeExpr], volumeFilterKeys)
-      : buildLikeAnyCondition([normalizedAttributeOrNameExpr], volumeFilterKeys.map((key) => `${key}Like`));
+      : buildLikeAnyCondition(
+          [normalizedAttributeOrNameExpr],
+          volumeFilterKeys.map((key) => `${key}Like`),
+        );
     candidateBaseConditions.push(`(${volumeFilterCondition} OR ${normalizedVolumeExpr} = '')`);
   }
   if (vendorIds.length === 1) {
@@ -859,7 +881,9 @@ function renderMedicineSearchSql(context) {
     scoreExpression,
     tradeNameSimilarityExpression,
   } = context;
-  const candidateJoinSql = needsVendorCountryJoin ? 'LEFT JOIN vendors v ON v.id = m.vendor_id' : '';
+  const candidateJoinSql = needsVendorCountryJoin
+    ? 'LEFT JOIN vendors v ON v.id = m.vendor_id'
+    : '';
   const candidateSelectColumns = [
     'm.*',
     needsVendorCountryJoin && `${normalizedVendorCountryExpr} AS normalized_vendor_country`,
@@ -868,7 +892,8 @@ function renderMedicineSearchSql(context) {
   ]
     .filter(Boolean)
     .join(',\n        ');
-  const useUnionCandidateIds = brandOnlySearch && !needsVendorCountryJoin && candidatePredicates.length > 1;
+  const useUnionCandidateIds =
+    brandOnlySearch && !needsVendorCountryJoin && candidatePredicates.length > 1;
   const candidateCteSql = useUnionCandidateIds
     ? `candidate_ids AS MATERIALIZED (
       ${buildCandidateIdBranches(candidateBaseConditions, candidatePredicates, candidateOrderExpression)}

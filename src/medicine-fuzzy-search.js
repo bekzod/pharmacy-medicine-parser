@@ -1,6 +1,4 @@
-const {
-  normalizeMedicineLanguage: normalizeMedicineFormPhrases,
-} = require('./medicine-language');
+const { normalizeMedicineLanguage: normalizeMedicineFormPhrases } = require('./medicine-language');
 
 const LATIN_TO_CYRILLIC_LAYOUT = {
   q: 'й',

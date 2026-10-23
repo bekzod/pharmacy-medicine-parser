@@ -4,7 +4,7 @@
   "description": "Medicine query parser and PostgreSQL search query builder extracted from pharmacy-analytics.",
   "license": "MIT",
   "type": "commonjs",
-  "packageManager": "bun@1.4.3",
+  "packageManager": "bun@1.4.4",
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",
@@ -19,7 +19,9 @@
     "./medicine-lookup-common": "./src/medicine-lookup-common.js"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "format": "bun fmt .",
+    "format:check": "bun fmt --check ."
   },
   "files": [
     "src"

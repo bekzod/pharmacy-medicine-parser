@@ -12,7 +12,8 @@ test('bare integer tablet strengths use milligrams and fractional shorthand keep
     ['Амоксициллин 500 №20', '500 мг'],
     ['Амоксициллин 0.5 таб №20', '0.5 г'],
     ['Ацикловир 0.2 таб №20', '0.2 г'],
-  ]) assert.equal(parse(query).strengths[0]?.text, strength, query);
+  ])
+    assert.equal(parse(query).strengths[0]?.text, strength, query);
 });
 
 test('promoted enzyme, vitamin-D and syrup numbers leave the trade name', () => {
@@ -27,7 +28,10 @@ test('promoted enzyme, vitamin-D and syrup numbers leave the trade name', () => 
 });
 
 test('inhalation route does not match the injection abbreviation', () => {
-  assert.notEqual(parse('Пульмикорт р-р д/ингаляций 0.25мг/мл 2мл №20').dosage_form_route, 'injection');
+  assert.notEqual(
+    parse('Пульмикорт р-р д/ингаляций 0.25мг/мл 2мл №20').dosage_form_route,
+    'injection',
+  );
   assert.equal(parse('Тестовый р-р д/и 5мл').dosage_form_route, 'injection');
   assert.equal(parse('Тестовый р-р д/инъекций 5мл').dosage_form_route, 'injection');
 });

@@ -32,7 +32,10 @@ function escapeLikePattern(value) {
 }
 
 function normalizeSqlTerm(value) {
-  return String(value || '').toLowerCase().replace(/ё/g, 'е').trim();
+  return String(value || '')
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .trim();
 }
 
 const normalizeText = normalizeSqlTerm;

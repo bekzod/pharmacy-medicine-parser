@@ -335,10 +335,7 @@ function buildBrandOnlyParsed(parsed, rawName) {
   if (!parsed) return null;
 
   const rawText = parsed.normalizedText || parsed?.attributes?.trade_name_text || rawName || '';
-  const fullText =
-    rawText === rawName
-      ? normalizeQuery(rawText)
-      : normalizeSqlTerm(rawText);
+  const fullText = rawText === rawName ? normalizeQuery(rawText) : normalizeSqlTerm(rawText);
   if (!fullText) return null;
 
   return {

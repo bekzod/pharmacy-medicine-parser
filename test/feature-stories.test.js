@@ -22,27 +22,33 @@ function replacementValues(searchQuery) {
 }
 
 test('F001 root package facade exports documented APIs', () => {
-  assert.deepEqual(Object.keys(api).sort(), [
-    'buildMedicineSearchQuery',
-    'buildQueryLookupProfiles',
-    'buildQueryVariants',
-    'parseMedicineQuery',
-  ].sort());
+  assert.deepEqual(
+    Object.keys(api).sort(),
+    [
+      'buildMedicineSearchQuery',
+      'buildQueryLookupProfiles',
+      'buildQueryVariants',
+      'parseMedicineQuery',
+    ].sort(),
+  );
 });
 
 test('F002 package subpaths are require-able and expose APIs', () => {
-  assert.deepEqual(Object.keys(pkg.exports).sort(), [
-    '.',
-    './fuzzy-search',
-    './latin-to-cyrillic',
-    './lookup-profiles',
-    './medicine-dosage-forms',
-    './medicine-lookup-common',
-    './medicine-name-profile',
-    './parser',
-    './query-builder',
-    './vendor-country',
-  ].sort());
+  assert.deepEqual(
+    Object.keys(pkg.exports).sort(),
+    [
+      '.',
+      './fuzzy-search',
+      './latin-to-cyrillic',
+      './lookup-profiles',
+      './medicine-dosage-forms',
+      './medicine-lookup-common',
+      './medicine-name-profile',
+      './parser',
+      './query-builder',
+      './vendor-country',
+    ].sort(),
+  );
 
   for (const exportPath of Object.values(pkg.exports)) {
     assert.ok(Object.keys(require(`..${exportPath.slice(1)}`)).length, exportPath);
@@ -142,7 +148,10 @@ test('F013 same-unit slash strengths become multi-value strengths', () => {
 test('F014 plus-separated strengths become combination nodes', () => {
   const strength = attributes('комбипреп 30 таб. 10 мг + 20 мг №10').strengths[0];
   assert.equal(strength.kind, 'combination');
-  assert.deepEqual(strength.components, [{ value: 10, unit: 'мг' }, { value: 20, unit: 'мг' }]);
+  assert.deepEqual(strength.components, [
+    { value: 10, unit: 'мг' },
+    { value: 20, unit: 'мг' },
+  ]);
 });
 
 test('F015 volume measurements parse package size', () => {
@@ -183,7 +192,10 @@ test('F019 oral liquids infer per-dose ratio and route', () => {
 test('F020 metered sprays keep per-dose strength and dose count', () => {
   const parsed = attributes('Момефин спрей назаль 0,5мг 120доз 12мл №1');
   assert.equal(parsed.strengths[0].text, '0.5 мг/доз');
-  assert.deepEqual(parsed.volumes.map((volume) => volume.text), ['120 доз', '12 мл']);
+  assert.deepEqual(
+    parsed.volumes.map((volume) => volume.text),
+    ['120 доз', '12 мл'],
+  );
 });
 
 test('F021 injection context infers omitted mass unit before slash volume', () => {
@@ -216,7 +228,10 @@ test('F025 vitamin and enzyme activity inference runs', () => {
 });
 
 test('F026 solvent clauses are not public volume attributes', () => {
-  assert.deepEqual(attributes('Мегасеф 750, порошок для инъекции № 1, с растворителем 6 мл').volumes, []);
+  assert.deepEqual(
+    attributes('Мегасеф 750, порошок для инъекции № 1, с растворителем 6 мл').volumes,
+    [],
+  );
 });
 
 test('F027 prefilled syringe markers do not pollute trade name', () => {
@@ -244,7 +259,10 @@ test('F030 flavor and variant tokens survive when they identify SKUs', () => {
 });
 
 test('F031 cotton and wet-wipe names normalize canonically', () => {
-  assert.equal(attributes('Вата гигиеническая гигрос. н/с 50г').trade_name_text, 'вата гигр нестер');
+  assert.equal(
+    attributes('Вата гигиеническая гигрос. н/с 50г').trade_name_text,
+    'вата гигр нестер',
+  );
   assert.equal(
     attributes('Детские Влажные салфетки гигиенические Cotton Club №25').trade_name_text,
     'салфетки влажные cotton club',
@@ -419,42 +437,56 @@ test('F051 vendor ID filters are emitted', () => {
 });
 
 test('F052 strict strength filters use delimited matching and blank fallback', () => {
-  const searchQuery = api.buildMedicineSearchQuery(api.parseMedicineQuery('Гайнекс ваг.супп.500мг№14'), {
-    requireParsedAttributeMatch: true,
-    strictParsedAttributeFilters: true,
-  });
+  const searchQuery = api.buildMedicineSearchQuery(
+    api.parseMedicineQuery('Гайнекс ваг.супп.500мг№14'),
+    {
+      requireParsedAttributeMatch: true,
+      strictParsedAttributeFilters: true,
+    },
+  );
   assert.ok(searchQuery.sql.includes("LIKE :strengthFilter0_0Like || '/%'"));
   assert.ok(searchQuery.sql.includes("OR lower(coalesce(m.strength, '')) = ''"));
 });
 
 test('F053 strict volume filters use parsed volume and blank fallback', () => {
-  const searchQuery = api.buildMedicineSearchQuery(api.parseMedicineQuery('Бруфен сироп 100мг/5мл 100мл'), {
-    requireParsedAttributeMatch: true,
-    strictParsedAttributeFilters: true,
-  });
+  const searchQuery = api.buildMedicineSearchQuery(
+    api.parseMedicineQuery('Бруфен сироп 100мг/5мл 100мл'),
+    {
+      requireParsedAttributeMatch: true,
+      strictParsedAttributeFilters: true,
+    },
+  );
   assert.ok(replacementValues(searchQuery).includes('100 мл'));
   assert.ok(searchQuery.sql.includes("OR lower(coalesce(m.volume, '')) = ''"));
 });
 
 test('F054 pack-one filtering admits null pack for compatible forms', () => {
-  const searchQuery = api.buildMedicineSearchQuery(api.parseMedicineQuery('Момефин спрей назаль 0,5мг 120доз 12мл №1'), {
-    requireParsedAttributeMatch: true,
-    strictParsedAttributeFilters: true,
-  });
+  const searchQuery = api.buildMedicineSearchQuery(
+    api.parseMedicineQuery('Момефин спрей назаль 0,5мг 120доз 12мл №1'),
+    {
+      requireParsedAttributeMatch: true,
+      strictParsedAttributeFilters: true,
+    },
+  );
   assert.ok(searchQuery.sql.includes('(m.pack = :packCount OR m.pack IS NULL)'));
 });
 
 test('F055 vendor country search joins and filters vendors', () => {
-  const searchQuery = api.buildMedicineSearchQuery(api.parseMedicineQuery('Ибупрофен Германия 200мг'));
+  const searchQuery = api.buildMedicineSearchQuery(
+    api.parseMedicineQuery('Ибупрофен Германия 200мг'),
+  );
   assert.ok(searchQuery.sql.includes('LEFT JOIN vendors v ON v.id = m.vendor_id'));
   assert.ok(replacementValues(searchQuery).includes('германия'));
 });
 
 test('F056 measurement search aliases include equivalents', () => {
-  const percent = api.buildMedicineSearchQuery(api.parseMedicineQuery('Риназолин спрей 0.05% 15мл'), {
-    requireParsedAttributeMatch: true,
-    strictParsedAttributeFilters: true,
-  });
+  const percent = api.buildMedicineSearchQuery(
+    api.parseMedicineQuery('Риназолин спрей 0.05% 15мл'),
+    {
+      requireParsedAttributeMatch: true,
+      strictParsedAttributeFilters: true,
+    },
+  );
   assert.ok(replacementValues(percent).includes('0.5 мг/мл'));
 
   const reversed = api.buildMedicineSearchQuery(api.parseMedicineQuery('Арлеверт 40мг/20мг №20'), {
@@ -472,7 +504,10 @@ test('F057 measurement number formatter trims insignificant zeros', () => {
 test('F058 lookup-common normalizes SQL terms and escapes LIKE values', () => {
   assert.equal(common.normalizeSqlTerm(' ЁЖ '), 'еж');
   assert.equal(common.escapeLikePattern('10%_x\\y'), '10\\%\\_x\\\\y');
-  assert.equal(common.buildLikeAnyCondition(['m.name'], ['q']), "(m.name LIKE '%' || :q || '%' ESCAPE '\\')");
+  assert.equal(
+    common.buildLikeAnyCondition(['m.name'], ['q']),
+    "(m.name LIKE '%' || :q || '%' ESCAPE '\\')",
+  );
 });
 
 test('F059 Latin homoglyph normalization only changes mixed-script words', () => {

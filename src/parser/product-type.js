@@ -1,8 +1,4 @@
-const {
-  PREFILLED_RE,
-  PRODUCT_TYPE_PATTERNS,
-  SYRINGE_RE,
-} = require('./constants');
+const { PREFILLED_RE, PRODUCT_TYPE_PATTERNS, SYRINGE_RE } = require('./constants');
 
 const PHARMA_STRENGTH_UNITS = new Set(['мг', 'мкг', '%', 'ед', 'ме']);
 

@@ -123,7 +123,12 @@ const MEDICINE_DOSAGE_FORMS = [
   },
   {
     form: 'suspension',
-    parsePatterns: [wholeToken('сус\\.?'), wholeToken('сусп\\.?'), /суспензи/iu, wholeToken('суспенз\\.?')],
+    parsePatterns: [
+      wholeToken('сус\\.?'),
+      wholeToken('сусп\\.?'),
+      /суспензи/iu,
+      wholeToken('суспенз\\.?'),
+    ],
     profile: {
       token: 'сусп',
       priority: 4,
@@ -328,24 +333,20 @@ const MEDICINE_FORM_NORMALIZERS = PROFILED_DOSAGE_FORMS.flatMap(({ profile }) =>
 );
 
 const MEDICINE_FORM_PRIORITIES = new Map(
-  PROFILED_DOSAGE_FORMS.map(({ profile }) => [
-    profile.token,
-    profile.priority || 0,
-  ]),
+  PROFILED_DOSAGE_FORMS.map(({ profile }) => [profile.token, profile.priority || 0]),
 );
 
 const MEDICINE_FORM_TO_DOSAGE_FORMS = new Map(
-  PROFILED_DOSAGE_FORMS.map(({ form, profile }) => [
-    profile.token,
-    [form],
-  ]),
+  PROFILED_DOSAGE_FORMS.map(({ form, profile }) => [profile.token, [form]]),
 );
 
 function parseDosageForm(name) {
   if (!name) return null;
-  return MEDICINE_DOSAGE_FORMS.find(({ parsePatterns }) =>
-    parsePatterns.some((pattern) => pattern.test(name)),
-  )?.form || null;
+  return (
+    MEDICINE_DOSAGE_FORMS.find(({ parsePatterns }) =>
+      parsePatterns.some((pattern) => pattern.test(name)),
+    )?.form || null
+  );
 }
 
 module.exports = {

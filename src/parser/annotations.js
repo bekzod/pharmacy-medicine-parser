@@ -1,7 +1,4 @@
-const {
-  PAREN_GROUP_RE,
-  PARENTHESIZED_VARIANT_TOKENS,
-} = require('./constants');
+const { PAREN_GROUP_RE, PARENTHESIZED_VARIANT_TOKENS } = require('./constants');
 const { tokenizeMedicineQuery } = require('./tokenizer');
 
 const PREFILLED_ANNOTATION_WORDS = new Set(['запол']);
