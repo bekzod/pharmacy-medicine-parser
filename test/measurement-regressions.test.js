@@ -8,10 +8,10 @@ test('rounding calculated measurements preserves integer trailing zeros', () => 
   assert.equal(formatNormalizedNumber(3.3 / 0.33), '10');
   assert.equal(formatNormalizedNumber(99.9999999), '100');
   assert.equal(formatNormalizedNumber(2.5000001), '2.5');
-  const query = buildMedicineSearchQuery(
-    parseMedicineQuery('Тестовый р-р 3.3 мг/0.33 мл'),
-    { requireParsedAttributeMatch: true, strictParsedAttributeFilters: true },
-  );
+  const query = buildMedicineSearchQuery(parseMedicineQuery('Тестовый р-р 3.3 мг/0.33 мл'), {
+    requireParsedAttributeMatch: true,
+    strictParsedAttributeFilters: true,
+  });
   const values = Object.values(query.replacements);
   assert.ok(values.includes('10 мг/мл'));
   assert.ok(!values.includes('1 мг/мл'));

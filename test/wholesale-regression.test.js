@@ -46,22 +46,25 @@ for (const [name, query] of [
 }
 
 wholesaleFixture('normalizes Uzbek sesame oil wording', 'Кунжут ёги 100мл', {
-    trade_name_text: 'кунжутное масло',
-    trade_name_tokens: ['кунжутное', 'масло'],
-    dosage_form: null,
-    dosage_form_token: null,
-    dosage_form_source: null,
-    dosage_form_route: null,
-    container_type: null,
-    product_type: 'medicine',
-    vendor_country_text: null,
-    vendor_country_tokens: [],
-    strengths: [],
-    volumes: [{ text: '100 мл', value: 100, unit: 'мл' }],
-    pack_count: null,
+  trade_name_text: 'кунжутное масло',
+  trade_name_tokens: ['кунжутное', 'масло'],
+  dosage_form: null,
+  dosage_form_token: null,
+  dosage_form_source: null,
+  dosage_form_route: null,
+  container_type: null,
+  product_type: 'medicine',
+  vendor_country_text: null,
+  vendor_country_tokens: [],
+  strengths: [],
+  volumes: [{ text: '100 мл', value: 100, unit: 'мл' }],
+  pack_count: null,
 });
 
-wholesaleFixture('treats infusion ml/ml concentration typo as mg/ml ratio', 'ИНТРАФЕН р/инф 400мл/4мл №1', {
+wholesaleFixture(
+  'treats infusion ml/ml concentration typo as mg/ml ratio',
+  'ИНТРАФЕН р/инф 400мл/4мл №1',
+  {
     trade_name_text: 'интрафен',
     trade_name_tokens: ['интрафен'],
     dosage_form: 'infusion',
@@ -84,9 +87,13 @@ wholesaleFixture('treats infusion ml/ml concentration typo as mg/ml ratio', 'И�
     ],
     volumes: [{ text: '4 мл', value: 4, unit: 'мл' }],
     pack_count: 1,
-});
+  },
+);
 
-wholesaleFixture('keeps bare potassium wording out of eye-drop typo handling', 'Кали хлорид р-р 4% 10мл', {
+wholesaleFixture(
+  'keeps bare potassium wording out of eye-drop typo handling',
+  'Кали хлорид р-р 4% 10мл',
+  {
     trade_name_text: 'кали хлорид',
     trade_name_tokens: ['кали', 'хлорид'],
     dosage_form: 'solution',
@@ -100,9 +107,13 @@ wholesaleFixture('keeps bare potassium wording out of eye-drop typo handling', '
     strengths: [{ kind: 'simple', text: '4%', values: [4], value: 4, unit: '%' }],
     volumes: [{ text: '10 мл', value: 10, unit: 'мл' }],
     pack_count: null,
-});
+  },
+);
 
-wholesaleFixture('keeps parenthesized active ingredient in wholesale trade identity', 'ПЕО (цефтриаксон) 1г №1 фл.', {
+wholesaleFixture(
+  'keeps parenthesized active ingredient in wholesale trade identity',
+  'ПЕО (цефтриаксон) 1г №1 фл.',
+  {
     trade_name_text: 'пео цефтриаксон',
     trade_name_tokens: ['пео', 'цефтриаксон'],
     dosage_form: 'solution',
@@ -116,22 +127,23 @@ wholesaleFixture('keeps parenthesized active ingredient in wholesale trade ident
     strengths: [{ kind: 'simple', text: '1 г', values: [1], value: 1, unit: 'г' }],
     volumes: [],
     pack_count: 1,
-});
+  },
+);
 
 wholesaleFixture('recognizes English liquid supplement form', 'Liquid Vitamin B-Complex 240 ml', {
-    trade_name_text: 'vitamin b-complex',
-    trade_name_tokens: ['vitamin', 'b-complex'],
-    dosage_form: 'solution',
-    dosage_form_token: 'жид',
-    dosage_form_source: 'explicit',
-    dosage_form_route: null,
-    container_type: null,
-    product_type: 'medicine',
-    vendor_country_text: null,
-    vendor_country_tokens: [],
-    strengths: [],
-    volumes: [{ text: '240 мл', value: 240, unit: 'мл' }],
-    pack_count: null,
+  trade_name_text: 'vitamin b-complex',
+  trade_name_tokens: ['vitamin', 'b-complex'],
+  dosage_form: 'solution',
+  dosage_form_token: 'жид',
+  dosage_form_source: 'explicit',
+  dosage_form_route: null,
+  container_type: null,
+  product_type: 'medicine',
+  vendor_country_text: null,
+  vendor_country_tokens: [],
+  strengths: [],
+  volumes: [{ text: '240 мл', value: 240, unit: 'мл' }],
+  pack_count: null,
 });
 
 test('drops parenthesized variant after one-letter wholesale name', () => {
@@ -139,7 +151,9 @@ test('drops parenthesized variant after one-letter wholesale name', () => {
 });
 
 test('drops trailing parenthesized annotation after short wholesale code', () => {
-  assert.deepEqual(parseMedicineQuery('ПЕО 1г №1 фл. (картон)').attributes.trade_name_tokens, ['пео']);
+  assert.deepEqual(parseMedicineQuery('ПЕО 1г №1 фл. (картон)').attributes.trade_name_tokens, [
+    'пео',
+  ]);
 });
 
 test('keeps short vial marker in lookup profiles', () => {

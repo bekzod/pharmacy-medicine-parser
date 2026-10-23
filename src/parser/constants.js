@@ -272,12 +272,7 @@ const SYRINGE_RE = /шприц(?!-?\s*руч)(?:[а-я]*)?/iu;
 const PREFILLED_RE = /преднаполненн|(?:предварительно\s+)?(?:наполненн|заполненн)/iu;
 const PAREN_GROUP_RE = /\(([^()]+)\)/gu;
 const COUNT_BEFORE_FORM_DOSAGE_FORMS = new Set(['capsule', 'tablet']);
-const ORAL_SOLID_FORMS_WITH_IMPLICIT_MG = new Set([
-  'tablet',
-  'capsule',
-  'pastille',
-  'granule',
-]);
+const ORAL_SOLID_FORMS_WITH_IMPLICIT_MG = new Set(['tablet', 'capsule', 'pastille', 'granule']);
 const SIZE_CONTEXT_TOKENS = new Set(['р', 'раз', 'разм', 'размер']);
 
 const CONTAINER_NORMALIZERS = [
@@ -313,8 +308,7 @@ const CONTAINER_NORMALIZERS = [
     containerType: 'bottle',
   },
   {
-    pattern:
-      /^(пакетик[а-я]*|пакет(?:ы|ов|а|е|ам|ами|ах)?|пакет\.?|паке\.|саше|стик[а-я]*|ф-п)$/u,
+    pattern: /^(пакетик[а-я]*|пакет(?:ы|ов|а|е|ам|ами|ах)?|пакет\.?|паке\.|саше|стик[а-я]*|ф-п)$/u,
     containerType: 'sachet',
   },
 ];
@@ -345,7 +339,10 @@ const DOSAGE_FORM_ROUTE_PATTERNS = [
   // Negative lookahead must exclude "инф" (infusion) AND "инг" (inhalation)
   // so neither route gets misclassified as injection.
   { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*и\\.?(?![\\p{L}])`, 'iu') },
-  { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*ин(?![фг])[а-я]*\\.?`, 'iu') },
+  {
+    route: 'injection',
+    pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*ин(?![фг])[а-я]*\\.?`, 'iu'),
+  },
   { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*в\\.?\\s*в\\.?`, 'iu') },
   { route: 'injection', pattern: new RegExp(`${RP}\\.?\\s*д\\s*\\/\\s*п\\s*\\/\\s*к`, 'iu') },
   {
@@ -374,13 +371,11 @@ const ORAL_LIQUID_REFERENCE_VOLUME_ML = new Set([5, 10]);
 const NOT_LETTER_BEHIND = '(?<!\\p{L})';
 const stem = (pattern) => new RegExp(`${NOT_LETTER_BEHIND}${pattern}`, 'iu');
 
-const GAUZE_WORD_RE = /(?<!\p{L})марл(?:я|и|е|ю|ей|ёй|евый|евая|евое|евые|евыми|евых|евой|евою|евую|евом)(?!\p{L})/iu;
+const GAUZE_WORD_RE =
+  /(?<!\p{L})марл(?:я|и|е|ю|ей|ёй|евый|евая|евое|евые|евыми|евых|евой|евою|евую|евом)(?!\p{L})/iu;
 
 const PRODUCT_TYPE_PATTERNS = {
-  medicine: [
-    stem('регидрацион[а-яё]*\\s+соль'),
-    stem('соль(?:-l[рp])?\\s+регидрацион[а-яё]*'),
-  ],
+  medicine: [stem('регидрацион[а-яё]*\\s+соль'), stem('соль(?:-l[рp])?\\s+регидрацион[а-яё]*')],
   other: [
     stem('презерватив[а-я]*'),
     stem('тест.?полос'),

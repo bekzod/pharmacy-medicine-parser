@@ -2,10 +2,7 @@ const MEDICINE_LANGUAGE_NORMALIZERS = [
   // International-unit values commonly use dots as thousands separators.
   [/\b(\d+(?:\.\d{3})+)\.(?=[\p{L}])/gu, (match, digits) => `${digits.replace(/\./g, '')} `],
   [/\b(\d+(?:\.\d{3}){2,})(?=\s)/gu, (match) => match.replace(/\./g, '')],
-  [
-    /\b(\d+(?:\.\d{3})+)(?=\s*(?:ме|ед|iu)(?:\W|$))/giu,
-    (match) => `${match.replace(/\./g, '')} `,
-  ],
+  [/\b(\d+(?:\.\d{3})+)(?=\s*(?:ме|ед|iu)(?:\W|$))/giu, (match) => `${match.replace(/\./g, '')} `],
   // Parenthetical material describes the container, not a transdermal patch.
   [/(амп|флак|шприц[а-я]*)\.?\s*\(\s*пласт\.?\s*\)/gu, '$1'],
   // Standalone salt-suffix abbreviation (гидрохлорид), not a mass ratio.

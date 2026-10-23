@@ -107,8 +107,7 @@ class ParseState {
       (this.dosageForm === 'powder' && token.dosageForm === 'suspension') ||
       !this.dosageFormToken ||
       sourcePriority > currentSourcePriority ||
-      (sourcePriority === currentSourcePriority &&
-        token.priority >= this.dosageFormToken.priority);
+      (sourcePriority === currentSourcePriority && token.priority >= this.dosageFormToken.priority);
 
     if (keepCurrentDosageForm || !shouldReplace) return;
 

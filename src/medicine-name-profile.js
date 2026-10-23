@@ -341,10 +341,7 @@ function extractMedicineDosageForms(rawName, profileForm = null) {
 function hasJoinedMedicineTokenSequence(normalizedName, left, right) {
   if (!left || !right) return false;
 
-  return (
-    normalizedName.includes(`${left}${right}`) ||
-    normalizedName.includes(`${left}-${right}`)
-  );
+  return normalizedName.includes(`${left}${right}`) || normalizedName.includes(`${left}-${right}`);
 }
 
 function extractPrefixedMedicineNumericToken(normalizedName, value) {
@@ -490,12 +487,7 @@ function extractMedicineProfile(name) {
         continue;
       }
 
-      if (
-        joinedWithPrevious &&
-        previous !== 'д' &&
-        brandTokens.length &&
-        nextEndsBrandPhrase
-      ) {
+      if (joinedWithPrevious && previous !== 'д' && brandTokens.length && nextEndsBrandPhrase) {
         brandTokens.push(token);
         continue;
       }

@@ -4,10 +4,7 @@ const {
   SYRINGE_RE,
 } = require('./constants');
 const { normalizeMedicineQuery } = require('./normalization');
-const {
-  inferBareKapDosageForm,
-  tokenizeNormalizedQuery,
-} = require('./tokenizer');
+const { inferBareKapDosageForm, tokenizeNormalizedQuery } = require('./tokenizer');
 const {
   buildMeasurementNode,
   buildSimpleStrengthNode,
@@ -18,10 +15,7 @@ const {
   inferImplicitMedicineAttributes,
   normalizeExplicitMeasurementCandidates,
 } = require('./inference');
-const {
-  classifyProductType,
-  isBrandOnlyProductType,
-} = require('./product-type');
+const { classifyProductType, isBrandOnlyProductType } = require('./product-type');
 const {
   extractTradeIdentity,
   normalizeTradeNameTokens,

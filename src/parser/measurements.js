@@ -34,9 +34,7 @@ function buildMeasurementNodeFromStrength(strengthNode) {
   if (!hasSingleValue && (values.length < 2 || !values.every(Number.isFinite))) return null;
 
   return {
-    text: hasSingleValue
-      ? `${strengthNode.value} ${strengthNode.unit}`
-      : strengthNode.text,
+    text: hasSingleValue ? `${strengthNode.value} ${strengthNode.unit}` : strengthNode.text,
     value: hasSingleValue ? Number.parseFloat(strengthNode.value) : null,
     unit: strengthNode.unit,
     startIndex: strengthNode.startIndex,
@@ -48,11 +46,12 @@ function buildSimpleStrengthNode(values, unit, startIndex, endIndex) {
   // DB stores multi-value combination strengths with the unit duplicated on
   // both sides of the slash (e.g. "5 мг/10 мг"). Match that format so strict
   // strength:= filters in Typesense hit. Single-value and percent stay compact.
-  const text = unit === '%'
-    ? `${values.join('/')}%`
-    : values.length > 1
-      ? values.map((value) => `${value} ${unit}`).join('/')
-      : `${values[0]} ${unit}`;
+  const text =
+    unit === '%'
+      ? `${values.join('/')}%`
+      : values.length > 1
+        ? values.map((value) => `${value} ${unit}`).join('/')
+        : `${values[0]} ${unit}`;
   return {
     kind: 'simple',
     text,
@@ -487,10 +486,7 @@ function consumeStrengthOrVolumeNode(tokens, state, index) {
     strengthNode.kind === 'simple' &&
     (unitFamily === 'volume' || unitFamily === 'length' || isDoseCount);
   if (isDoseCount) {
-    const perDoseStrength = inferMultiValuePerDoseStrength(
-      strengthNode,
-      state.strengthCandidates,
-    );
+    const perDoseStrength = inferMultiValuePerDoseStrength(strengthNode, state.strengthCandidates);
     if (perDoseStrength) return applyCandidateRule(state, perDoseStrength, 'strength');
   }
 
@@ -676,7 +672,8 @@ function mergeSameUnitSlashStrength(strengths, normalizedText) {
   // a single multi-value simple, so merge unconditionally.
   const slashValues = slashStrength.values;
   const allValuesEqual = slashValues.every((value) => value === slashValues[0]);
-  const hasDuplicateValues = new Set(slashValues.map((value) => `${value}`)).size < slashValues.length;
+  const hasDuplicateValues =
+    new Set(slashValues.map((value) => `${value}`)).size < slashValues.length;
   const separateSimples = strengths.filter(
     (strength) =>
       strength?.kind === 'simple' &&
@@ -685,7 +682,12 @@ function mergeSameUnitSlashStrength(strengths, normalizedText) {
       slashValues.includes(strength.value),
   );
   const hasDistinctSeparates = separateSimples.length >= 2;
-  if (slashStrength.unit === 'мг' && hasDistinctSeparates && !allValuesEqual && !hasDuplicateValues) {
+  if (
+    slashStrength.unit === 'мг' &&
+    hasDistinctSeparates &&
+    !allValuesEqual &&
+    !hasDuplicateValues
+  ) {
     return strengths;
   }
 
@@ -754,25 +756,26 @@ function inferCompactPlusSharedDenominatorRatios(strengths, normalizedText, dosa
   );
   if (!compact) return strengths;
 
-  const replacementStrengths = dosageForm === 'drops'
-    ? [
-        buildRatioStrengthNode(
-          values,
-          unit,
-          { value: null, unit: denominatorUnit },
-          compact.startIndex,
-          compact.endIndex,
-        ),
-      ]
-    : values.map((value) =>
-        buildRatioStrengthNode(
-          [value],
-          unit,
-          { value: null, unit: denominatorUnit },
-          compact.startIndex,
-          compact.endIndex,
-        ),
-      );
+  const replacementStrengths =
+    dosageForm === 'drops'
+      ? [
+          buildRatioStrengthNode(
+            values,
+            unit,
+            { value: null, unit: denominatorUnit },
+            compact.startIndex,
+            compact.endIndex,
+          ),
+        ]
+      : values.map((value) =>
+          buildRatioStrengthNode(
+            [value],
+            unit,
+            { value: null, unit: denominatorUnit },
+            compact.startIndex,
+            compact.endIndex,
+          ),
+        );
   return (strengths || []).flatMap((strength) =>
     strength === compact ? replacementStrengths : [strength],
   );
@@ -828,9 +831,7 @@ function inferOralLiquidVolumeFromDoseCount(strengths, volumes, dosageForm) {
 
   const doseVolume = (volumes || []).find(
     (volume) =>
-      volume?.unit === 'доз' &&
-      Number.isFinite(Number(volume.value)) &&
-      Number(volume.value) > 1,
+      volume?.unit === 'доз' && Number.isFinite(Number(volume.value)) && Number(volume.value) > 1,
   );
   const perDoseStrength = (strengths || []).find(
     (strength) =>
@@ -930,30 +931,30 @@ function inferDropsMassPackageRatio(strengths, volumes, dosageForm) {
 
   let inferredRatio = false;
   const nextStrengths = (strengths || []).map((strength) => {
-      const components = strength?.components || [];
-      const unit = components[0]?.unit;
-      if (
-        strength?.kind !== 'combination' ||
-        components.length < 2 ||
-        !['мг', 'мкг', 'г'].includes(unit) ||
-        !components.every(
-          (component) => component.unit === unit && Number.isFinite(Number(component.value)),
-        )
-      ) {
-        return strength;
-      }
+    const components = strength?.components || [];
+    const unit = components[0]?.unit;
+    if (
+      strength?.kind !== 'combination' ||
+      components.length < 2 ||
+      !['мг', 'мкг', 'г'].includes(unit) ||
+      !components.every(
+        (component) => component.unit === unit && Number.isFinite(Number(component.value)),
+      )
+    ) {
+      return strength;
+    }
 
-      inferredRatio = true;
-      const values = components.map((component) => Number(component.value));
-      return {
-        kind: 'ratio',
-        text: `${values.map(formatNormalizedNumber).join('/')} ${unit}/г`,
-        values,
-        value: null,
-        unit,
-        denominator: { value: null, unit: 'г' },
-      };
-    });
+    inferredRatio = true;
+    const values = components.map((component) => Number(component.value));
+    return {
+      kind: 'ratio',
+      text: `${values.map(formatNormalizedNumber).join('/')} ${unit}/г`,
+      values,
+      value: null,
+      unit,
+      denominator: { value: null, unit: 'г' },
+    };
+  });
 
   return {
     strengths: nextStrengths,
@@ -969,9 +970,7 @@ function inferDropsMassPerMlStrengths(strengths, volumes, dosageForm) {
   if (dosageForm !== 'drops') return strengths;
   const hasMlPackage = (volumes || []).some(
     (volume) =>
-      volume?.unit === 'мл' &&
-      Number.isFinite(Number(volume.value)) &&
-      Number(volume.value) >= 1,
+      volume?.unit === 'мл' && Number.isFinite(Number(volume.value)) && Number(volume.value) >= 1,
   );
   if (!hasMlPackage) return strengths;
 
@@ -1055,9 +1054,7 @@ function inferLiquidActivityUnitPackageRatio(strengths, volumes, dosageForm, nor
 
   const mlVolumes = (volumes || []).filter(
     (volume) =>
-      volume?.unit === 'мл' &&
-      Number.isFinite(Number(volume.value)) &&
-      Number(volume.value) > 0,
+      volume?.unit === 'мл' && Number.isFinite(Number(volume.value)) && Number(volume.value) > 0,
   );
   if (mlVolumes.length !== 1) return { strengths, volumes };
 
@@ -1103,9 +1100,7 @@ function inferMeteredDoseStrengths(strengths, volumes, dosageForm) {
 
   const hasDoseVolume = (volumes || []).some(
     (volume) =>
-      volume?.unit === 'доз' &&
-      Number.isFinite(Number(volume.value)) &&
-      Number(volume.value) > 1,
+      volume?.unit === 'доз' && Number.isFinite(Number(volume.value)) && Number(volume.value) > 1,
   );
   if (!hasDoseVolume) return { strengths, volumes };
 
@@ -1187,61 +1182,29 @@ function finalizePublicMeasurements(state, normalizedText) {
   );
   strengths = fixOralSolidMlStrengthTypo(strengths, state.dosageForm);
   strengths = mergeSameUnitSlashStrength(strengths, normalizedText);
-  strengths = inferCompactPlusSharedDenominatorRatios(
-    strengths,
-    normalizedText,
-    state.dosageForm,
-  );
-  strengths = inferInhalationPerDoseStrengths(
-    strengths,
-    normalizedText,
-    state.dosageForm,
-  );
+  strengths = inferCompactPlusSharedDenominatorRatios(strengths, normalizedText, state.dosageForm);
+  strengths = inferInhalationPerDoseStrengths(strengths, normalizedText, state.dosageForm);
   let volumes = dedupePublicNodes(
     state.volumeCandidates.map(toPublicMeasurementNode).filter(Boolean),
   );
-  ({ strengths, volumes } = splitTopicalPackageMassRatios(
-    strengths,
-    volumes,
-    state.dosageForm,
-  ));
+  ({ strengths, volumes } = splitTopicalPackageMassRatios(strengths, volumes, state.dosageForm));
   ({ strengths, volumes } = inferTopicalDoseUnitPerGramStrength(
     strengths,
     volumes,
     state.dosageForm,
   ));
-  ({ strengths, volumes } = inferDropsMassPackageRatio(
-    strengths,
-    volumes,
-    state.dosageForm,
-  ));
+  ({ strengths, volumes } = inferDropsMassPackageRatio(strengths, volumes, state.dosageForm));
   strengths = inferDropsMassPerMlStrengths(strengths, volumes, state.dosageForm);
-  strengths = inferLiquidPlusMlComponentTypo(
-    strengths,
-    state.dosageForm,
-    normalizedText,
-  );
+  strengths = inferLiquidPlusMlComponentTypo(strengths, state.dosageForm, normalizedText);
   ({ strengths, volumes } = inferLiquidActivityUnitPackageRatio(
     strengths,
     volumes,
     state.dosageForm,
     normalizedText,
   ));
-  ({ strengths, volumes } = inferMeteredDoseStrengths(
-    strengths,
-    volumes,
-    state.dosageForm,
-  ));
-  ({ strengths, volumes } = simplifyInhalationDoseRatios(
-    strengths,
-    volumes,
-    state.dosageForm,
-  ));
-  volumes = inferOralLiquidVolumeFromDoseCount(
-    strengths,
-    volumes,
-    state.dosageForm,
-  );
+  ({ strengths, volumes } = inferMeteredDoseStrengths(strengths, volumes, state.dosageForm));
+  ({ strengths, volumes } = simplifyInhalationDoseRatios(strengths, volumes, state.dosageForm));
+  volumes = inferOralLiquidVolumeFromDoseCount(strengths, volumes, state.dosageForm);
   return { strengths, volumes: dedupePublicNodes(volumes) };
 }
 

@@ -1,15 +1,6 @@
-const {
-  MEDICINE_FORM_PRIORITIES,
-  parseDosageForm,
-} = require('../medicine-dosage-forms');
-const {
-  MEDICINE_UNIT_TOKENS,
-  normalizeMedicineToken,
-} = require('../medicine-name-profile');
-const {
-  TOKEN_RE,
-  UNIT_FAMILY_BY_VALUE,
-} = require('./constants');
+const { MEDICINE_FORM_PRIORITIES, parseDosageForm } = require('../medicine-dosage-forms');
+const { MEDICINE_UNIT_TOKENS, normalizeMedicineToken } = require('../medicine-name-profile');
+const { TOKEN_RE, UNIT_FAMILY_BY_VALUE } = require('./constants');
 const {
   normalizeMedicineQuery,
   normalizeFormTokenValue,
@@ -106,7 +97,9 @@ function hasFollowingStrengthContext(tokens, index) {
     cursor += 2;
   }
 
-  return tokens[cursor]?.type === 'UNIT' && ['мг', 'мкг', 'г'].includes(tokens[cursor].normalizedValue);
+  return (
+    tokens[cursor]?.type === 'UNIT' && ['мг', 'мкг', 'г'].includes(tokens[cursor].normalizedValue)
+  );
 }
 
 function restoreStandaloneLengthUnitTokens(tokens) {
@@ -139,13 +132,7 @@ function restorePlasticBottleAnnotationTokens(tokens) {
       return token;
     }
 
-    const {
-      dosageForm,
-      dosageFormSource,
-      containerType,
-      priority,
-      ...rest
-    } = token;
+    const { dosageForm, dosageFormSource, containerType, priority, ...rest } = token;
     return {
       ...rest,
       type: 'WORD',
